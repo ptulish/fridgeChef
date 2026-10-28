@@ -1,0 +1,40 @@
+services:
+  # FastAPI Backend Web Service
+  - type: web
+    name: fridgechef-backend
+    runtime: python
+    plan: free
+    region: frankfurt
+    rootDir: backend
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: DATABASE_URL
+        sync: false # Set in Render Dashboard: your Neon / Supabase connection string
+      - key: GEMINI_API_KEY
+        sync: false # Set in Render Dashboard: Google Gemini API key (optional)
+      - key: CORS_ORIGINS
+        value: "*"
+
+  # React / Vite Frontend (Static Site - Free Hosting)
+  - type: static
+    name: fridgechef-frontend
+    plan: free
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    publishDir: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        sync: false # Set in Render Dashboard: URL of fridgechef-backend (e.g. https://fridgechef-backend.onrender.com)

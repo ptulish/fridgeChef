@@ -1,0 +1,2 @@
+# Requirements proxy for deployment environments executing from repository root
+-r backend/requirements.txt

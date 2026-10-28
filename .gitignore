@@ -1,0 +1,77 @@
+# Python & Bytecode
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+.venv/
+**/.venv/
+env/
+**/env/
+venv/
+**/venv/
+ENV/
+**/ENV/
+
+# Environment Variables & Secrets
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+
+# Local SQLite Databases
+*.db
+*.sqlite
+*.sqlite3
+fridgechef.db
+backend/fridgechef.db
+
+# Node / Frontend Build & Dependencies
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.vite/
+**/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE & OS Files
+.DS_Store
+**/.DS_Store
+.idea/
+**/.idea/
+.vscode/
+**/.vscode/
+*.swp
+*.swo
+
+# Tests, Cache & Coverage
+.pytest_cache/
+**/.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
