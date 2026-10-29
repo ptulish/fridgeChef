@@ -8,8 +8,9 @@ engine_kwargs = {"echo": False}
 if "sqlite" in settings.DATABASE_URL:
     engine_kwargs["connect_args"] = {"check_same_thread": False}
 elif "postgresql" in settings.DATABASE_URL:
-    # Disable prepared statement caching for compatibility with PgBouncer / Neon pooled connections
-    engine_kwargs["connect_args"] = {"statement_cache_size": 0}
+    # Disable prepared statement caching for compatibility with PgBouncer / Neon pooled connections,
+    # enable SSL for cloud databases (Neon, Supabase), and configure connection recycling
+    engine_kwargs["connect_args"] = {"statement_cache_size": 0, "ssl": True}
     engine_kwargs["pool_pre_ping"] = True
     engine_kwargs["pool_recycle"] = 300
 

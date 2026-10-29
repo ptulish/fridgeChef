@@ -18,9 +18,11 @@ services:
       - key: APP_DEBUG
         value: "false"
       - key: DATABASE_URL
-        sync: false # Set in Render Dashboard: your Neon / Supabase connection string
+        sync: false # Set in Render Dashboard: your Neon connection string
       - key: GEMINI_API_KEY
-        sync: false # Set in Render Dashboard: Google Gemini API key (optional)
+        sync: false # Set in Render Dashboard: your Gemini API key
+      - key: GEMINI_MODEL
+        value: gemini-3.1-flash-lite
       - key: CORS_ORIGINS
         value: "*"
 

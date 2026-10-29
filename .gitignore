@@ -75,3 +75,4 @@ pnpm-debug.log*
 htmlcov/
 .mypy_cache/
 .ruff_cache/
+.neon

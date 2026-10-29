@@ -31,6 +31,18 @@ class Settings(BaseSettings):
             v_str = v_str.replace("postgres://", "postgresql+asyncpg://", 1)
         elif v_str.startswith("postgresql://") and not v_str.startswith("postgresql+"):
             v_str = v_str.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+        # asyncpg does not accept sslmode or channel_binding as connection keyword arguments.
+        # Strip query params incompatible with asyncpg (SSL is configured via connect_args={'ssl': True})
+        if "asyncpg" in v_str and "?" in v_str:
+            from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+            u = urlparse(v_str)
+            params = parse_qs(u.query)
+            params.pop("sslmode", None)
+            params.pop("channel_binding", None)
+            new_query = urlencode(params, doseq=True)
+            v_str = urlunparse((u.scheme, u.netloc, u.path, u.params, new_query, u.fragment))
+
         return v_str
 
     # CORS
