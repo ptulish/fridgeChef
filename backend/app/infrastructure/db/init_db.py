@@ -556,98 +556,106 @@ POPULAR_CATALOG = [
 
 async def clean_brands_in_db():
     import re
-    async with async_session_factory() as session:
-        # 1. Update IngredientModel canonical_name
-        stmt = select(IngredientModel)
-        res = await session.execute(stmt)
-        for ing in res.scalars().all():
-            for old_val, new_val in BRAND_REPLACEMENTS.items():
-                if old_val.lower() in ing.canonical_name.lower():
-                    ing.canonical_name = new_val
-            for brand in ("Maizena ", "Kikkoman ", "Shan’shi ", "Shan'shi ", "Go-Tan ", "OBAP ", "Clever ", "Clever", "BILLA "):
-                if brand.lower() in ing.canonical_name.lower():
-                    ing.canonical_name = re.sub(re.escape(brand), "", ing.canonical_name, flags=re.IGNORECASE).strip()
-
-        # 2. Update PantryItemModel
-        stmt2 = select(PantryItemModel)
-        res2 = await session.execute(stmt2)
-        for p in res2.scalars().all():
-            if p.custom_ingredient_name:
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        async with async_session_factory() as session:
+            # 1. Update IngredientModel canonical_name
+            stmt = select(IngredientModel)
+            res = await session.execute(stmt)
+            for ing in res.scalars().all():
                 for old_val, new_val in BRAND_REPLACEMENTS.items():
-                    if old_val.lower() in p.custom_ingredient_name.lower():
-                        p.custom_ingredient_name = new_val
+                    if old_val.lower() in ing.canonical_name.lower():
+                        ing.canonical_name = new_val
                 for brand in ("Maizena ", "Kikkoman ", "Shan’shi ", "Shan'shi ", "Go-Tan ", "OBAP ", "Clever ", "Clever", "BILLA "):
-                    if brand.lower() in p.custom_ingredient_name.lower():
-                        p.custom_ingredient_name = re.sub(re.escape(brand), "", p.custom_ingredient_name, flags=re.IGNORECASE).strip()
-            if p.notes:
-                for brand in ("Maizena", "Kikkoman", "Shan’shi", "Shan'shi", "Go-Tan", "OBAP", "Clever", "BILLA"):
-                    p.notes = re.sub(re.escape(brand), "", p.notes, flags=re.IGNORECASE).strip()
+                    if brand.lower() in ing.canonical_name.lower():
+                        ing.canonical_name = re.sub(re.escape(brand), "", ing.canonical_name, flags=re.IGNORECASE).strip()
 
-        # 3. Update RecipeIngredientModel
-        stmt3 = select(RecipeIngredientModel)
-        res3 = await session.execute(stmt3)
-        for ring in res3.scalars().all():
-            for old_val, new_val in BRAND_REPLACEMENTS.items():
-                if old_val.lower() in ring.ingredient_name_snapshot.lower():
-                    ring.ingredient_name_snapshot = new_val
-            for brand in ("Maizena ", "Kikkoman ", "Shan’shi ", "Shan'shi ", "Go-Tan ", "OBAP ", "Clever ", "Clever", "BILLA "):
-                if brand.lower() in ring.ingredient_name_snapshot.lower():
-                    ring.ingredient_name_snapshot = re.sub(re.escape(brand), "", ring.ingredient_name_snapshot, flags=re.IGNORECASE).strip()
+            # 2. Update PantryItemModel notes
+            stmt2 = select(PantryItemModel)
+            res2 = await session.execute(stmt2)
+            for p in res2.scalars().all():
+                if getattr(p, "notes", None):
+                    for brand in ("Maizena", "Kikkoman", "Shan’shi", "Shan'shi", "Go-Tan", "OBAP", "Clever", "BILLA"):
+                        p.notes = re.sub(re.escape(brand), "", p.notes, flags=re.IGNORECASE).strip()
 
-        # 4. Update RecipeStepModel
-        stmt4 = select(RecipeStepModel)
-        res4 = await session.execute(stmt4)
-        for step in res4.scalars().all():
-            for old_val, new_val in BRAND_REPLACEMENTS.items():
-                if old_val in step.instruction:
-                    step.instruction = step.instruction.replace(old_val, new_val)
-            for brand in ("Bánh Phở", "OBAP", "Kikkoman", "Maizena", "Shan’shi", "Go-Tan", "BILLA", "Clever"):
-                step.instruction = step.instruction.replace(brand, "")
+            # 3. Update RecipeIngredientModel
+            stmt3 = select(RecipeIngredientModel)
+            res3 = await session.execute(stmt3)
+            for ring in res3.scalars().all():
+                for old_val, new_val in BRAND_REPLACEMENTS.items():
+                    if old_val.lower() in ring.ingredient_name_snapshot.lower():
+                        ring.ingredient_name_snapshot = new_val
+                for brand in ("Maizena ", "Kikkoman ", "Shan’shi ", "Shan'shi ", "Go-Tan ", "OBAP ", "Clever ", "Clever", "BILLA "):
+                    if brand.lower() in ring.ingredient_name_snapshot.lower():
+                        ring.ingredient_name_snapshot = re.sub(re.escape(brand), "", ring.ingredient_name_snapshot, flags=re.IGNORECASE).strip()
 
-        await session.commit()
+            # 4. Update RecipeStepModel
+            stmt4 = select(RecipeStepModel)
+            res4 = await session.execute(stmt4)
+            for step in res4.scalars().all():
+                for old_val, new_val in BRAND_REPLACEMENTS.items():
+                    if old_val in step.instruction:
+                        step.instruction = step.instruction.replace(old_val, new_val)
+                for brand in ("Bánh Phở", "OBAP", "Kikkoman", "Maizena", "Shan’shi", "Go-Tan", "BILLA", "Clever"):
+                    step.instruction = step.instruction.replace(brand, "")
+
+            await session.commit()
+    except Exception as exc:
+        logger.warning(f"clean_brands_in_db non-fatal error: {exc}")
 
 
 async def ensure_popular_catalog_in_db():
-    async with async_session_factory() as session:
-        stmt = select(IngredientModel.canonical_name)
-        res = await session.execute(stmt)
-        existing_names = {name.lower() for name in res.scalars().all()}
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        async with async_session_factory() as session:
+            stmt = select(IngredientModel.canonical_name)
+            res = await session.execute(stmt)
+            existing_names = {name.lower() for name in res.scalars().all()}
 
-        added = 0
-        for name, cat, unit in POPULAR_CATALOG:
-            if name.lower() not in existing_names:
-                ing = IngredientModel(
-                    canonical_name=name,
-                    category=cat,
-                    default_unit=unit,
-                )
-                session.add(ing)
-                existing_names.add(name.lower())
-                added += 1
+            added = 0
+            for name, cat, unit in POPULAR_CATALOG:
+                if name.lower() not in existing_names:
+                    ing = IngredientModel(
+                        canonical_name=name,
+                        category=cat,
+                        default_unit=unit,
+                    )
+                    session.add(ing)
+                    existing_names.add(name.lower())
+                    added += 1
 
-        if added > 0:
-            await session.commit()
+            if added > 0:
+                await session.commit()
+    except Exception as exc:
+        logger.warning(f"ensure_popular_catalog_in_db non-fatal error: {exc}")
 
 
 async def sync_staples_and_zones():
-    from sqlalchemy.orm import selectinload
-    async with async_session_factory() as session:
-        stmt = select(PantryItemModel).options(selectinload(PantryItemModel.ingredient))
-        res = await session.execute(stmt)
-        items = res.scalars().all()
-        for p in items:
-            name = (p.ingredient.canonical_name if p.ingredient else (p.custom_ingredient_name or "")).lower()
-            if any(s in name for s in ("соль", "перец", "масло растительное", "сахар", "вода", "чеснок", "соевый соус", "мука")):
-                p.is_staple = True
-                p.status = "in_stock"
-            if not p.storage_zone or p.storage_zone == "fridge":
-                if any(k in name for k in ("мороз", "фарш", "заморож", "свинина")):
-                    p.storage_zone = "freezer"
-                elif any(k in name for k in ("лапша", "удон", "рис", "спагетти", "макарон", "мука", "сахар", "перец", "соль", "сухари")):
-                    p.storage_zone = "pantry"
-                else:
-                    p.storage_zone = "fridge"
-        await session.commit()
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        from sqlalchemy.orm import selectinload
+        async with async_session_factory() as session:
+            stmt = select(PantryItemModel).options(selectinload(PantryItemModel.ingredient))
+            res = await session.execute(stmt)
+            items = res.scalars().all()
+            for p in items:
+                name = (p.ingredient.canonical_name if p.ingredient else (getattr(p, "custom_ingredient_name", "") or "")).lower()
+                if any(s in name for s in ("соль", "перец", "масло растительное", "сахар", "вода", "чеснок", "соевый соус", "мука")):
+                    p.is_staple = True
+                    p.status = "in_stock"
+                if not p.storage_zone or p.storage_zone == "fridge":
+                    if any(k in name for k in ("мороз", "фарш", "заморож", "свинина")):
+                        p.storage_zone = "freezer"
+                    elif any(k in name for k in ("лапша", "удон", "рис", "спагетти", "макарон", "мука", "сахар", "перец", "соль", "сухари")):
+                        p.storage_zone = "pantry"
+                    else:
+                        p.storage_zone = "fridge"
+            await session.commit()
+    except Exception as exc:
+        logger.warning(f"sync_staples_and_zones non-fatal error: {exc}")
 
 
 async def main():
