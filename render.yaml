@@ -26,17 +26,17 @@ services:
       - key: CORS_ORIGINS
         value: "*"
 
-  # React / Vite Frontend (Static Site - Free Hosting)
-  - type: static
+  # React / Vite Frontend (Static Site - Free CDN Hosting)
+  - type: web
     name: fridgechef-frontend
-    plan: free
+    runtime: static
     rootDir: frontend
     buildCommand: npm install && npm run build
-    publishDir: dist
+    staticPublishPath: ./dist
     routes:
       - type: rewrite
         source: /*
         destination: /index.html
     envVars:
       - key: VITE_API_URL
-        sync: false # Set in Render Dashboard: URL of fridgechef-backend (e.g. https://fridgechef-backend.onrender.com)
+        sync: false
