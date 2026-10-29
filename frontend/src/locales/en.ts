@@ -154,6 +154,42 @@ export const en = {
   ai_instructions_header: 'Cooking Instructions',
   ai_recipe_saved_alert: 'Recipe saved to your cookbook successfully!',
 
+  // AI Extended Query
+  ai_advanced_toggle: 'Advanced Request Options',
+  ai_advanced_hide: 'Hide Advanced Options',
+  ai_marinate_title: 'Meat Marination before Cooking',
+  ai_marinate_question: 'I want to marinate meat beforehand',
+  ai_marinate_time_label: 'Marination duration:',
+  ai_marinate_15m: '15 min (express)',
+  ai_marinate_30m: '30 min (recommended)',
+  ai_marinate_60m: '1 hour',
+  ai_marinate_120m: '2+ hours (deep)',
+  ai_must_use_title: 'Must-use items from your fridge',
+  ai_must_use_hint: 'Select one or more items from your fridge pantry:',
+  ai_must_use_selected: 'Selected: {count}',
+  ai_must_use_clear: 'Clear selection',
+  ai_must_use_empty_pantry: 'No products in your fridge yet. Add them in the "My Fridge" tab.',
+
+  // AI Refine & Adjust
+  ai_refine_title: 'Refine or Adjust Recipe with Chef',
+  ai_refine_subtitle: 'Tell the chef what to modify (e.g. less saltiness, add an ingredient, adjust spiciness)',
+  ai_refine_placeholder: 'E.g.: I want less saltiness / add bell pepper / make the sauce thicker...',
+  ai_refine_submit: 'Apply adjustment',
+  ai_refine_loading: 'Chef is adjusting recipe to your request...',
+  ai_refine_chip_less_salt: '🧂 Less salt / soy sauce',
+  ai_refine_chip_more_sauce: '🥣 More sauce',
+  ai_refine_chip_sweeter: '🍯 Sweeter balance',
+  ai_refine_chip_spicy: '🌶️ Add spiciness',
+  ai_refine_chip_faster: '⏱️ Cook faster',
+  ai_refine_revert: 'Revert to previous version',
+  ai_refine_add_ingredient_btn: '➕ Add custom ingredient manually',
+  ai_refine_add_ing_title: 'Add Ingredient to Recipe',
+  ai_refine_add_ing_name: 'Ingredient name',
+  ai_refine_add_ing_qty: 'Quantity',
+  ai_refine_add_ing_unit: 'Unit',
+  ai_refine_add_ing_confirm: 'Include in recipe',
+
+
   // Common UI
   common_loading: 'Loading...',
   common_error: 'Error: {err}',

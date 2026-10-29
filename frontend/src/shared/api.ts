@@ -180,7 +180,16 @@ export const api = {
       body: JSON.stringify({ api_key: apiKey }),
     }),
   generateAIRecipe: (
-    params?: string | { prompt?: string; mode?: string; satiety_level?: 'light' | 'standard' | 'hearty' }
+    params?:
+      | string
+      | {
+          prompt?: string;
+          mode?: string;
+          satiety_level?: 'light' | 'standard' | 'hearty';
+          marinate_meat?: boolean;
+          marinate_duration_minutes?: number | null;
+          must_use_ingredients?: string[];
+        }
   ) => {
     const body = typeof params === 'string' ? { prompt: params } : (params || {});
     return request<any>('/ai/generate-recipe', {
@@ -188,6 +197,15 @@ export const api = {
       body: JSON.stringify(body),
     });
   },
+  refineAIRecipe: (currentRecipe: any, refinementPrompt: string) =>
+    request<any>('/ai/refine-recipe', {
+      method: 'POST',
+      body: JSON.stringify({
+        current_recipe: currentRecipe,
+        refinement_prompt: refinementPrompt,
+      }),
+    }),
+
   saveGeneratedRecipe: (recipeData: any) =>
     request<Recipe>('/ai/save-generated-recipe', {
       method: 'POST',

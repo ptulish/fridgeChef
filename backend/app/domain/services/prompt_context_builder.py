@@ -72,6 +72,9 @@ class PromptContextBuilder:
         satiety_level: str = "standard",
         recent_feedback: Optional[List[str]] = None,
         staples: Optional[List[Dict[str, Any]]] = None,
+        marinate_meat: Optional[bool] = False,
+        marinate_duration_minutes: Optional[int] = None,
+        must_use_ingredients: Optional[List[str]] = None,
     ) -> Tuple[str, str, Dict[str, Dict[str, Any]]]:
         """
         Returns:
@@ -131,6 +134,22 @@ class PromptContextBuilder:
         salt_adj = flavor_params.get("salt", 0)
         sauce_adj = flavor_params.get("sauce_volume", 1)
 
+        marinate_instruction = ""
+        if marinate_meat:
+            dur = marinate_duration_minutes or 20
+            marinate_instruction = f"""
+7. ТРЕБОВАНИЕ МАРИНОВАНИЯ: Пользователь хочет предварительно замариновать мясо на {dur} минут.
+   - Обязательно добавь отдельный шаг маринования с указанием времени (duration_seconds: {dur * 60}).
+   - Ингредиенты, входящие в маринад (соус, специи, крахмал/масло), обязательно пометь ролью role: 'marinade'."""
+
+        must_use_instruction = ""
+        if must_use_ingredients:
+            items_str = ", ".join(must_use_ingredients)
+            must_use_instruction = f"""
+8. ОБЯЗАТЕЛЬНЫЕ ПРОДУКТЫ ИЗ ХОЛОДИЛЬНИКА: Пользователь выбрал следующие продукты, которые ОБЯЗАНЫ быть включены в рецепт:
+   [{items_str}].
+   Строго используй их в составе ингредиентов и шагах приготовления!"""
+
         system_instruction = f"""Ты — персональный шеф-повар и гастрономический ассистент FridgeChef.
 Твоя цель — создавать точные, вкусные домашние рецепты с привязкой к имеющимся продуктам.
 
@@ -148,7 +167,7 @@ class PromptContextBuilder:
 3. Если нужного ингредиента нет в наличии — укажи inventory_ref: null и availability: 'to_buy'.
 4. Базовые продукты (соль, перец, масло, вода, соевый соус) помечай availability: 'staple'.
 5. ПРИОРИТЕТ ЗАПРОСА: Если пользователь указал конкретное мясо (например, говядина) или гарнир (удон) — используй их, даже если их нет в наличии (пользователь докупит).
-6. РАСЧЕТ КБЖУ: Укажи в 'macros_per_serving' ориентировочные калории (kcal), белки (protein_g), жиры (fat_g) и углеводы (carbs_g) на 1 порцию.
+6. РАСЧЕТ КБЖУ: Укажи в 'macros_per_serving' ориентировочные калории (kcal), белки (protein_g), жиры (fat_g) и углеводы (carbs_g) на 1 порцию.{marinate_instruction}{must_use_instruction}
 """
 
         # 5. User Content
@@ -167,11 +186,19 @@ class PromptContextBuilder:
             "staples": compact_staples,
         }
 
+        if marinate_meat:
+            user_payload["marinate_meat"] = True
+            user_payload["marinate_duration_minutes"] = marinate_duration_minutes or 20
+
+        if must_use_ingredients:
+            user_payload["must_use_ingredients"] = must_use_ingredients
+
         if target_meal_kcal:
             user_payload["target_meal_calories"] = target_meal_kcal
 
         if recent_feedback:
             user_payload["recent_feedback"] = recent_feedback[-3:]
+
 
         user_content_json = json.dumps(user_payload, ensure_ascii=False, indent=2)
         return system_instruction, user_content_json, ref_map

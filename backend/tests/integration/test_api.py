@@ -209,6 +209,52 @@ async def test_ai_status_and_generator_metadata():
 
 
 @pytest.mark.asyncio
+async def test_ai_extended_generation_and_refinement():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # 1. Generate recipe with marination and must-use ingredients
+        gen_resp = await client.post(
+            "/api/v1/ai/generate-recipe",
+            json={
+                "prompt": "Вок со свининой",
+                "marinate_meat": True,
+                "marinate_duration_minutes": 30,
+                "must_use_ingredients": ["Go-Tan Wok Teriyaki", "Сухая удон-лапша"],
+            },
+        )
+        assert gen_resp.status_code == 200
+        recipe = gen_resp.json()
+        assert "title" in recipe
+        assert "ingredients" in recipe
+        assert "steps" in recipe
+
+        # Verify marination step exists or is reflected in duration
+        assert recipe["duration_minutes"] >= 30
+        has_marinate = any("марин" in s["instruction"].lower() for s in recipe["steps"])
+        assert has_marinate, "Steps should include a marination instruction"
+
+        # Verify must-use ingredients are in ingredients list
+        ing_names = [i["name"].lower() for i in recipe["ingredients"]]
+        assert any("teriyaki" in n or "терияк" in n for n in ing_names)
+        assert any("удон" in n or "лапш" in n for n in ing_names)
+
+        # 2. Refine recipe with user text: "хочу меньше солености и добавь чеснок"
+        refine_resp = await client.post(
+            "/api/v1/ai/refine-recipe",
+            json={
+                "current_recipe": recipe,
+                "refinement_prompt": "хочу меньше солености и добавь чеснок",
+            },
+        )
+        assert refine_resp.status_code == 200
+        refined = refine_resp.json()
+        assert "title" in refined
+        assert "why_this_recipe" in refined
+        # Check that why_this_recipe or description reflects the change
+        assert "солен" in refined["why_this_recipe"].lower() or "солен" in refined.get("description", "").lower() or "шеф" in refined["why_this_recipe"].lower()
+
+
+
+@pytest.mark.asyncio
 async def test_depletion_preview_complete_and_undo():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         # 1. Get a recipe

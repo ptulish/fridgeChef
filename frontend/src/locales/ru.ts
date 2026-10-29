@@ -154,6 +154,42 @@ export const ru = {
   ai_instructions_header: 'Инструкции приготовления',
   ai_recipe_saved_alert: 'Рецепт успешно сохранен в вашу кулинарную книгу!',
 
+  // AI Extended Query
+  ai_advanced_toggle: 'Расширенные параметры запроса',
+  ai_advanced_hide: 'Скрыть расширенные параметры',
+  ai_marinate_title: 'Маринование мяса перед готовкой',
+  ai_marinate_question: 'Хочу предварительно замариновать мясо',
+  ai_marinate_time_label: 'Длительность маринования:',
+  ai_marinate_15m: '15 мин (экспресс)',
+  ai_marinate_30m: '30 мин (рекомендуется)',
+  ai_marinate_60m: '1 час',
+  ai_marinate_120m: '2+ часа (глубокое)',
+  ai_must_use_title: 'Обязательно использовать из холодильника',
+  ai_must_use_hint: 'Выберите один или несколько продуктов из вашего холодильника:',
+  ai_must_use_selected: 'Выбрано: {count}',
+  ai_must_use_clear: 'Сбросить выбор',
+  ai_must_use_empty_pantry: 'В холодильнике пока нет продуктов. Добавьте их во вкладке «Мой холодильник».',
+
+  // AI Refine & Adjust
+  ai_refine_title: 'Подправить или дополнить рецепт у шефа',
+  ai_refine_subtitle: 'Напишите шефу, что изменить (например, меньше солености, добавить продукт, изменить остроту)',
+  ai_refine_placeholder: 'Например: хочу меньше солености / добавь болгарский перец / сделай соус гуще...',
+  ai_refine_submit: 'Применить правку',
+  ai_refine_loading: 'Шеф обновляет рецепт под ваши правки...',
+  ai_refine_chip_less_salt: '🧂 Меньше соли / соуса',
+  ai_refine_chip_more_sauce: '🥣 Больше соуса',
+  ai_refine_chip_sweeter: '🍯 Сладковатый баланс',
+  ai_refine_chip_spicy: '🌶️ Добавить пикантности',
+  ai_refine_chip_faster: '⏱️ Сделать быстрее',
+  ai_refine_revert: 'Вернуть предыдущий вариант',
+  ai_refine_add_ingredient_btn: '➕ Добавить свой ингредиент вручную',
+  ai_refine_add_ing_title: 'Добавить ингредиент в текущий рецепт',
+  ai_refine_add_ing_name: 'Название продукта',
+  ai_refine_add_ing_qty: 'Количество',
+  ai_refine_add_ing_unit: 'Единица',
+  ai_refine_add_ing_confirm: 'Включить в рецепт',
+
+
   // Common UI
   common_loading: 'Загрузка...',
   common_error: 'Ошибка: {err}',

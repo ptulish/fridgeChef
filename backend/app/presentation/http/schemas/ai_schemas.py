@@ -56,6 +56,15 @@ class GenerateAIRecipeRequest(BaseModel):
     prompt: Optional[str] = None
     mode: Optional[str] = None  # e.g. quick_15, high_protein, comfort_food, cheat_meal
     satiety_level: Optional[Literal["light", "standard", "hearty"]] = "standard"
+    marinate_meat: Optional[bool] = False
+    marinate_duration_minutes: Optional[int] = None
+    must_use_ingredients: Optional[List[str]] = Field(default_factory=list)
+
+
+class RefineAIRecipeRequest(BaseModel):
+    current_recipe: Dict[str, Any] = Field(..., description="Текущий черновик рецепта")
+    refinement_prompt: str = Field(..., description="Пожелание пользователя по корректировке рецепта (текст)")
+
 
 
 class SuggestAdaptationRequest(BaseModel):

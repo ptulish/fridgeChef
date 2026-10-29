@@ -34,10 +34,23 @@ class GeminiRecipeAIProvider:
         mode: Optional[str] = None,
         satiety_level: str = "standard",
         recent_feedback: Optional[List[str]] = None,
+        marinate_meat: Optional[bool] = False,
+        marinate_duration_minutes: Optional[int] = None,
+        must_use_ingredients: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         client = self.get_client()
         if not client:
-            return await self.mock_fallback.generate_recipe_suggestion(pantry_items, taste_profile, prompt)
+            return await self.mock_fallback.generate_recipe_suggestion(
+                pantry_items=pantry_items,
+                taste_profile=taste_profile,
+                prompt=prompt,
+                mode=mode,
+                satiety_level=satiety_level,
+                recent_feedback=recent_feedback,
+                marinate_meat=marinate_meat,
+                marinate_duration_minutes=marinate_duration_minutes,
+                must_use_ingredients=must_use_ingredients,
+            )
 
         system_instruction, user_content_json, ref_map = PromptContextBuilder.build_context(
             pantry_items=pantry_items,
@@ -46,6 +59,9 @@ class GeminiRecipeAIProvider:
             mode=mode,
             satiety_level=satiety_level,
             recent_feedback=recent_feedback,
+            marinate_meat=marinate_meat,
+            marinate_duration_minutes=marinate_duration_minutes,
+            must_use_ingredients=must_use_ingredients,
         )
 
         try:
@@ -83,12 +99,99 @@ class GeminiRecipeAIProvider:
 
         except Exception as e:
             logger.error(f"Gemini API call failed, falling back to mock provider: {e}")
-            res = await self.mock_fallback.generate_recipe_suggestion(pantry_items, taste_profile, prompt)
+            res = await self.mock_fallback.generate_recipe_suggestion(
+                pantry_items=pantry_items,
+                taste_profile=taste_profile,
+                prompt=prompt,
+                mode=mode,
+                satiety_level=satiety_level,
+                recent_feedback=recent_feedback,
+                marinate_meat=marinate_meat,
+                marinate_duration_minutes=marinate_duration_minutes,
+                must_use_ingredients=must_use_ingredients,
+            )
             res["generator"] = "mock"
             res["model"] = "offline-rules"
             res["provider_name"] = "Оффлайн-движок FridgeChef"
             res["fallback_reason"] = f"Ошибка запроса к Gemini: {e}"
             return res
+
+    async def refine_recipe_suggestion(
+        self,
+        current_recipe: Dict[str, Any],
+        refinement_prompt: str,
+        taste_profile: Dict[str, Any],
+        pantry_items: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        client = self.get_client()
+        if not client:
+            return await self.mock_fallback.refine_recipe_suggestion(
+                current_recipe=current_recipe,
+                refinement_prompt=refinement_prompt,
+                taste_profile=taste_profile,
+                pantry_items=pantry_items,
+            )
+
+        system_instruction = f"""Ты — персональный шеф-повар и кулинарный ассистент FridgeChef.
+Пользователь просит скорректировать или дополнить ранее сгенерированный черновик рецепта.
+Пожелание пользователя: "{refinement_prompt}".
+
+КУЛИНАРНЫЙ ДНК ПОЛЬЗОВАТЕЛЯ:
+{taste_profile.get("ai_profile_summary", "")}
+
+ПРАВИЛА КОРРЕКТИРОВКИ:
+1. Сохрани общее блюдо, но внеси точные изменения согласно пожеланию пользователя.
+2. Если пользователь хочет меньше солености — уменьши дозировку соли/соевого соуса, добавь воду или примечание, что соус разбавлен.
+3. Если пользователь хочет добавить ингредиент (например, томаты, перец, чеснок и т.д.) — добавь его в список ingredients с правильной граммовкой и ролью, и интегрируй в шаги steps.
+4. Если пользователь просит замариновать мясо — добавь шаг маринования с таймингом и пометь маринад role='marinade'.
+5. Обнови КБЖУ (macros_per_serving) и укажи в why_this_recipe суть внесенной корректировки.
+6. Выходной формат обязан строго соответствовать схеме RecipeDraft в JSON.
+"""
+
+        user_content = json.dumps(
+            {
+                "original_recipe": current_recipe,
+                "refinement_request": refinement_prompt,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+
+        try:
+            from google.genai import types
+
+            response = client.models.generate_content(
+                model=settings.GEMINI_MODEL,
+                contents=user_content,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    response_mime_type="application/json",
+                    response_schema=RecipeDraft,
+                    temperature=0.6,
+                ),
+            )
+
+            draft = RecipeDraft.model_validate_json(response.text)
+            data = draft.model_dump()
+            data["generator"] = "gemini"
+            data["model"] = settings.GEMINI_MODEL
+            data["provider_name"] = f"Google Gemini ({settings.GEMINI_MODEL})"
+            return data
+
+        except Exception as e:
+            logger.error(f"Gemini recipe refinement failed, falling back to mock: {e}")
+            res = await self.mock_fallback.refine_recipe_suggestion(
+                current_recipe=current_recipe,
+                refinement_prompt=refinement_prompt,
+                taste_profile=taste_profile,
+                pantry_items=pantry_items,
+            )
+            res["generator"] = "mock"
+            res["model"] = "offline-rules"
+            res["provider_name"] = "Оффлайн-движок FridgeChef"
+            res["fallback_reason"] = f"Ошибка Gemini при корректировке: {e}"
+            return res
+
 
     async def suggest_adaptation(
         self,

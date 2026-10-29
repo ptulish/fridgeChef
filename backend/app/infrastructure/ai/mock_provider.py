@@ -14,6 +14,12 @@ class MockRecipeAIProvider:
         pantry_items: List[Dict[str, Any]],
         taste_profile: Dict[str, Any],
         prompt: Optional[str] = None,
+        mode: Optional[str] = None,
+        satiety_level: str = "standard",
+        recent_feedback: Optional[List[str]] = None,
+        marinate_meat: Optional[bool] = False,
+        marinate_duration_minutes: Optional[int] = None,
+        must_use_ingredients: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         prompt_lower = (prompt or "").lower().strip()
 
@@ -257,6 +263,20 @@ class MockRecipeAIProvider:
             },
         ] + sauce_items
 
+        if must_use_ingredients:
+            existing_names = [i["name"].lower() for i in all_ingredients]
+            for must_ing in must_use_ingredients:
+                if not any(must_ing.lower() in en or en in must_ing.lower() for en in existing_names):
+                    all_ingredients.append({
+                        "name": must_ing,
+                        "quantity": 100.0,
+                        "unit": "g",
+                        "role": "required",
+                        "preparation_note": "выбрано из вашего холодильника",
+                        "scalable": True,
+                        "availability": "in_stock",
+                    })
+
         steps = [
             {
                 "step_number": 1,
@@ -280,12 +300,25 @@ class MockRecipeAIProvider:
             },
         ]
 
+        total_duration = 25
+        if marinate_meat:
+            marinate_dur = marinate_duration_minutes or 20
+            total_duration += marinate_dur
+            # Insert marination step at the beginning
+            for st in steps:
+                st["step_number"] += 1
+            steps.insert(0, {
+                "step_number": 1,
+                "instruction": f"Предварительное маринование мяса ({marinate_dur} мин): Нарежьте {title_meat} ({meat_prep}). Смешайте с 1 ч. л. соевого соуса, 0.5 ч. л. крахмала и каплей масла. Оставьте мариноваться на {marinate_dur} минут для сочности.",
+                "duration_seconds": marinate_dur * 60,
+            })
+
         return {
             "title": title,
             "description": description,
             "cuisine": "Китайская / Вок",
             "difficulty": "medium",
-            "duration_minutes": 25,
+            "duration_minutes": total_duration,
             "base_servings": 1,
             "equipment_used": ["wok", "knife", "cutting_board"],
             "ingredients": all_ingredients,
@@ -301,6 +334,108 @@ class MockRecipeAIProvider:
             "model": "offline-rules",
             "provider_name": "Оффлайн-движок FridgeChef",
         }
+
+    async def refine_recipe_suggestion(
+        self,
+        current_recipe: Dict[str, Any],
+        refinement_prompt: str,
+        taste_profile: Optional[Dict[str, Any]] = None,
+        pantry_items: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        import copy
+        import re
+        recipe = copy.deepcopy(current_recipe)
+        prompt_lower = refinement_prompt.lower().strip()
+
+        why_parts = []
+
+        # 1. Salt reduction
+        if any(w in prompt_lower for w in ("соль", "солен", "соли", "пересол", "пресн", "менее солен")):
+            for ing in recipe.get("ingredients", []):
+                name = ing.get("name", "").lower()
+                if any(s in name for s in ("соев", "соль", "kikkoman", "соус")):
+                    qty = ing.get("quantity")
+                    if qty is not None:
+                        ing["quantity"] = max(0.5, round(float(qty) * 0.5, 1))
+                    ing["preparation_note"] = (ing.get("preparation_note") or "") + " (снижено по вашей просьбе)"
+            why_parts.append("Уменьшена соленость (дозировка соевого соуса/соли снижена)")
+
+        # 2. Sauce volume increase
+        if any(w in prompt_lower for w in ("соус", "подлив", "жидк", "сочнее")) and not any(w in prompt_lower for w in ("меньше", "убав")):
+            for ing in recipe.get("ingredients", []):
+                if ing.get("role") == "main_sauce" or "соус" in ing.get("name", "").lower():
+                    qty = ing.get("quantity")
+                    if qty is not None:
+                        ing["quantity"] = round(float(qty) * 1.4, 1)
+            why_parts.append("Увеличен объем соуса")
+
+        # 3. Sweetness
+        if any(w in prompt_lower for w in ("слад", "сахар", "мед")):
+            found_sweet = False
+            for ing in recipe.get("ingredients", []):
+                if any(sw in ing.get("name", "").lower() for sw in ("мёд", "сахар", "sweet")):
+                    qty = ing.get("quantity")
+                    if qty is not None:
+                        ing["quantity"] = round(float(qty) * 1.5, 1)
+                    found_sweet = True
+            if not found_sweet:
+                recipe.get("ingredients", []).append({
+                    "name": "Мёд Clever",
+                    "quantity": 1.0,
+                    "unit": "tsp",
+                    "role": "main_sauce",
+                    "preparation_note": "для карамелизации и сладости",
+                    "scalable": True,
+                })
+            why_parts.append("Добавлена приятная сладость")
+
+        # 4. Spiciness
+        if any(w in prompt_lower for w in ("остр", "пикант", "перец", "чили")):
+            recipe.get("ingredients", []).append({
+                "name": "Кайенский перец / чили",
+                "quantity": 1.0,
+                "unit": "pinch",
+                "role": "optional",
+                "preparation_note": "для пикантной остроты",
+                "scalable": False,
+            })
+            why_parts.append("Добавлена пикантная острота")
+
+        # 5. Add custom ingredient
+        add_match = re.search(r"(?:добавь|добавить|плюс|положи|включи|насыпь|налей)\s+([a-zA-Zа-яА-ЯёЁ\s\-]+)", prompt_lower)
+        if add_match:
+            candidate = add_match.group(1).strip()
+            for noise in ("пожалуйста", "еще", "немного", "чуть-чуть", "в блюдо", "в рецепт"):
+                candidate = candidate.replace(noise, "").strip()
+            if candidate and len(candidate) > 2 and not any(w in candidate for w in ("соус", "соль", "острот", "сладост")):
+                display_name = candidate.capitalize()
+                is_pcs = any(u in candidate for u in ("зуб", "шт", "луковиц", "яйц"))
+                recipe.get("ingredients", []).append({
+                    "name": display_name,
+                    "quantity": 1.0 if is_pcs else 100.0,
+                    "unit": "pcs" if is_pcs else "g",
+                    "role": "required",
+                    "preparation_note": "добавлено по вашей просьбе",
+                    "scalable": True,
+                    "availability": "in_stock",
+                })
+                steps = recipe.get("steps", [])
+                steps.append({
+                    "step_number": len(steps) + 1,
+                    "instruction": f"Дополнительный ингредиент: подготовьте {display_name.lower()} и добавьте в сковороду/вок вместе с остальными ингредиентами.",
+                    "duration_seconds": 60,
+                })
+                why_parts.append(f"Добавлен ингредиент '{display_name}'")
+
+        if not why_parts:
+            why_parts.append(f"Скорректировано по запросу: {refinement_prompt}")
+
+        recipe["why_this_recipe"] = f"Правка шефа: {'; '.join(why_parts)}."
+        recipe["generator"] = "mock"
+        recipe["model"] = "offline-rules"
+        recipe["provider_name"] = "Оффлайн-движок FridgeChef"
+        return recipe
+
 
     async def suggest_adaptation(
         self,

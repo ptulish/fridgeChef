@@ -20,6 +20,7 @@ from app.infrastructure.db.repositories.recipe_repo import SQLAlchemyRecipeRepos
 from app.infrastructure.db.repositories.cooking_repo import SQLAlchemyCookingRepository
 from app.presentation.http.schemas.ai_schemas import (
     GenerateAIRecipeRequest,
+    RefineAIRecipeRequest,
     SuggestAdaptationRequest,
 )
 from app.presentation.http.schemas.recipe_schemas import RecipeResponse
@@ -156,8 +157,62 @@ async def generate_recipe(
         prompt=payload.prompt,
         mode=payload.mode,
         satiety_level=payload.satiety_level or "standard",
+        marinate_meat=payload.marinate_meat,
+        marinate_duration_minutes=payload.marinate_duration_minutes,
+        must_use_ingredients=payload.must_use_ingredients,
     )
     return recipe_data
+
+
+@router.post("/refine-recipe")
+async def refine_recipe(
+    payload: RefineAIRecipeRequest,
+    current_user: UserModel = Depends(get_current_user),
+    ai_provider: GeminiRecipeAIProvider = Depends(get_ai_provider),
+    pantry_repo: SQLAlchemyPantryRepository = Depends(get_pantry_repo),
+    taste_repo: SQLAlchemyTasteProfileRepository = Depends(get_taste_profile_repo),
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not initialized")
+
+    prompt_text = payload.refinement_prompt.strip()
+    if not prompt_text:
+        raise HTTPException(status_code=400, detail="Текст корректировки не может быть пустым")
+
+    pantry_items = await pantry_repo.get_user_pantry(current_user.id)
+    pantry_summary = [
+        {
+            "name": p.ingredient.canonical_name if p.ingredient else "Продукт",
+            "quantity": float(p.quantity) if p.quantity is not None else None,
+            "unit": p.unit,
+            "status": p.status,
+        }
+        for p in pantry_items
+    ]
+
+    taste_profile = await taste_repo.get_by_user_id(current_user.id)
+    profile_dict = (
+        {
+            "meat_preferences": taste_profile.meat_preferences,
+            "sauce_preference": taste_profile.sauce_preference,
+            "salt_sensitivity": taste_profile.salt_sensitivity,
+            "disliked_ingredients": taste_profile.disliked_ingredients,
+            "equipment": taste_profile.equipment,
+            "habits": taste_profile.habits,
+            "ai_profile_summary": taste_profile.ai_profile_summary,
+        }
+        if taste_profile
+        else {}
+    )
+
+    refined = await ai_provider.refine_recipe_suggestion(
+        current_recipe=payload.current_recipe,
+        refinement_prompt=prompt_text,
+        taste_profile=profile_dict,
+        pantry_items=pantry_summary,
+    )
+    return refined
+
 
 
 @router.post("/save-generated-recipe", response_model=RecipeResponse)

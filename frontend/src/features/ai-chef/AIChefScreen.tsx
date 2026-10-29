@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../../shared/api';
 import { useI18n } from '../../app/I18nContext';
+import { PantryItem } from '../../types';
 import {
   Sparkles,
   Save,
@@ -11,7 +12,18 @@ import {
   ExternalLink,
   Lightbulb,
   Utensils,
-  Scale
+  Scale,
+  Sliders,
+  ChevronDown,
+  ChevronUp,
+  Check,
+  Plus,
+  RotateCcw,
+  Send,
+  X,
+  Flame,
+  MessageSquare,
+  Timer
 } from 'lucide-react';
 
 interface AIChefScreenProps {
@@ -32,8 +44,27 @@ export const AIChefScreen: React.FC<AIChefScreenProps> = ({ onRecipeSaved }) => 
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [configuringKey, setConfiguringKey] = useState(false);
 
+  // Extended Request State
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [marinateMeat, setMarinateMeat] = useState(false);
+  const [marinateDuration, setMarinateDuration] = useState<number>(30);
+  const [mustUseIngredients, setMustUseIngredients] = useState<string[]>([]);
+  const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
+
+  // Refine & History State
+  const [refinementPrompt, setRefinementPrompt] = useState('');
+  const [refining, setRefining] = useState(false);
+  const [recipeHistory, setRecipeHistory] = useState<any[]>([]);
+
+  // Manual Add Ingredient Modal State
+  const [showAddIngModal, setShowAddIngModal] = useState(false);
+  const [newIngName, setNewIngName] = useState('');
+  const [newIngQty, setNewIngQty] = useState<string>('');
+  const [newIngUnit, setNewIngUnit] = useState('g');
+
   useEffect(() => {
     loadAIStatus();
+    loadPantry();
   }, []);
 
   const loadAIStatus = async () => {
@@ -43,6 +74,36 @@ export const AIChefScreen: React.FC<AIChefScreenProps> = ({ onRecipeSaved }) => 
     } catch (err) {
       console.error('Error fetching AI status:', err);
     }
+  };
+
+  const loadPantry = async () => {
+    try {
+      const items = await api.getPantry();
+      setPantryItems(items);
+    } catch (err) {
+      console.error('Error fetching pantry items for AI chef:', err);
+    }
+  };
+
+  const availableFridgeItems = useMemo(() => {
+    const names = new Set<string>();
+    const list: string[] = [];
+    pantryItems.forEach((p) => {
+      if (p.status !== 'out') {
+        const n = p.ingredient?.canonical_name;
+        if (n && !names.has(n)) {
+          names.add(n);
+          list.push(n);
+        }
+      }
+    });
+    return list;
+  }, [pantryItems]);
+
+  const toggleMustUseIngredient = (name: string) => {
+    setMustUseIngredients((prev) =>
+      prev.includes(name) ? prev.filter((item) => item !== name) : [...prev, name]
+    );
   };
 
   const handleSaveKey = async (e: React.FormEvent) => {
@@ -67,9 +128,13 @@ export const AIChefScreen: React.FC<AIChefScreenProps> = ({ onRecipeSaved }) => 
     try {
       setLoading(true);
       setGeneratedRecipe(null);
+      setRecipeHistory([]);
       const recipe = await api.generateAIRecipe({
         prompt: text,
         satiety_level: satietyLevel,
+        marinate_meat: marinateMeat,
+        marinate_duration_minutes: marinateMeat ? marinateDuration : null,
+        must_use_ingredients: mustUseIngredients.length > 0 ? mustUseIngredients : undefined,
       });
       setGeneratedRecipe(recipe);
     } catch (err: any) {
@@ -77,6 +142,60 @@ export const AIChefScreen: React.FC<AIChefScreenProps> = ({ onRecipeSaved }) => 
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRefine = async (customPrompt?: string) => {
+    const text = (customPrompt || refinementPrompt).trim();
+    if (!text || !generatedRecipe) return;
+    try {
+      setRefining(true);
+      setRecipeHistory((prev) => [...prev, generatedRecipe]);
+      const updated = await api.refineAIRecipe(generatedRecipe, text);
+      setGeneratedRecipe(updated);
+      setRefinementPrompt('');
+    } catch (err: any) {
+      alert(t('common_error', { err: err?.message || String(err) }));
+    } finally {
+      setRefining(false);
+    }
+  };
+
+  const handleRevert = () => {
+    if (recipeHistory.length === 0) return;
+    const prev = recipeHistory[recipeHistory.length - 1];
+    setRecipeHistory((prevList) => prevList.slice(0, -1));
+    setGeneratedRecipe(prev);
+  };
+
+  const handleAddCustomIngredient = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newIngName.trim() || !generatedRecipe) return;
+    const newIng = {
+      name: newIngName.trim(),
+      quantity: newIngQty ? parseFloat(newIngQty) : 100,
+      unit: newIngUnit || 'g',
+      role: 'required',
+      preparation_note: 'добавлено вручную',
+      availability: 'in_stock',
+      scalable: true,
+    };
+    setRecipeHistory((prev) => [...prev, generatedRecipe]);
+    setGeneratedRecipe({
+      ...generatedRecipe,
+      ingredients: [...(generatedRecipe.ingredients || []), newIng],
+      steps: [
+        ...(generatedRecipe.steps || []),
+        {
+          step_number: (generatedRecipe.steps?.length || 0) + 1,
+          instruction: `Добавление ${newIngName.trim().toLowerCase()}: подготовьте и введите в блюдо по вкусу.`,
+          duration_seconds: 60,
+        },
+      ],
+      why_this_recipe: (generatedRecipe.why_this_recipe ? generatedRecipe.why_this_recipe + '. ' : '') + `Добавлен ингредиент: ${newIngName.trim()}`,
+    });
+    setNewIngName('');
+    setNewIngQty('');
+    setShowAddIngModal(false);
   };
 
   const handleSaveToRecipes = async () => {
@@ -92,6 +211,9 @@ export const AIChefScreen: React.FC<AIChefScreenProps> = ({ onRecipeSaved }) => 
       setSaving(false);
     }
   };
+
+  const activeAdvancedCount = (marinateMeat ? 1 : 0) + (mustUseIngredients.length > 0 ? 1 : 0);
+
 
   return (
     <div className="space-y-6">
@@ -253,6 +375,129 @@ export const AIChefScreen: React.FC<AIChefScreenProps> = ({ onRecipeSaved }) => 
           </div>
         </div>
 
+        {/* Advanced Options Toggle Button */}
+        <div className="pt-2 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="flex items-center justify-between w-full p-2.5 rounded-xl hover:bg-slate-50 transition text-xs font-bold text-slate-700"
+          >
+            <div className="flex items-center gap-2">
+              <Sliders className="w-4 h-4 text-orange-600" />
+              <span>{showAdvanced ? t('ai_advanced_hide') : t('ai_advanced_toggle')}</span>
+              {activeAdvancedCount > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[10px] font-bold">
+                  {activeAdvancedCount} активн.
+                </span>
+              )}
+            </div>
+            {showAdvanced ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+          </button>
+
+          {/* Advanced Accordion Content */}
+          {showAdvanced && (
+            <div className="mt-3 p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-4 animate-fadeIn">
+              {/* Option 1: Marination */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Flame className="w-4 h-4 text-amber-600" />
+                    <span className="text-xs font-bold text-slate-800">{t('ai_marinate_title')}</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={marinateMeat}
+                      onChange={(e) => setMarinateMeat(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-600"></div>
+                  </label>
+                </div>
+
+                {marinateMeat && (
+                  <div className="pl-6 space-y-1.5 animate-fadeIn">
+                    <span className="block text-[11px] font-medium text-slate-500">
+                      {t('ai_marinate_time_label')}
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { min: 15, label: t('ai_marinate_15m') },
+                        { min: 30, label: t('ai_marinate_30m') },
+                        { min: 60, label: t('ai_marinate_60m') },
+                        { min: 120, label: t('ai_marinate_120m') },
+                      ].map((dur) => (
+                        <button
+                          key={dur.min}
+                          type="button"
+                          onClick={() => setMarinateDuration(dur.min)}
+                          className={`px-3 py-1 rounded-lg text-xs font-semibold transition border ${
+                            marinateDuration === dur.min
+                              ? 'bg-orange-600 text-white border-orange-600 shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {dur.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Option 2: Must-use ingredients from pantry */}
+              <div className="space-y-2 pt-3 border-t border-slate-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Utensils className="w-4 h-4 text-emerald-600" />
+                    <span className="text-xs font-bold text-slate-800">{t('ai_must_use_title')}</span>
+                  </div>
+                  {mustUseIngredients.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setMustUseIngredients([])}
+                      className="text-[11px] text-orange-600 hover:underline font-semibold"
+                    >
+                      {t('ai_must_use_clear')} ({mustUseIngredients.length})
+                    </button>
+                  )}
+                </div>
+
+                <p className="text-[11px] text-slate-500">
+                  {t('ai_must_use_hint')}
+                </p>
+
+                {availableFridgeItems.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto p-1 bg-white rounded-xl border border-slate-200/70">
+                    {availableFridgeItems.map((name) => {
+                      const isSelected = mustUseIngredients.includes(name);
+                      return (
+                        <button
+                          key={name}
+                          type="button"
+                          onClick={() => toggleMustUseIngredient(name)}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition border ${
+                            isSelected
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs font-bold'
+                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {isSelected && <Check className="w-3 h-3 text-white" />}
+                          <span>{name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="p-3 bg-amber-50 text-amber-800 text-xs rounded-xl border border-amber-200">
+                    {t('ai_must_use_empty_pantry')}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="flex items-center gap-2 text-xs text-slate-400 pt-1">
           <ShieldCheck className="w-4 h-4 text-emerald-600" />
           <span>{t('ai_safety_notice')}</span>
@@ -269,6 +514,7 @@ export const AIChefScreen: React.FC<AIChefScreenProps> = ({ onRecipeSaved }) => 
 
       {generatedRecipe && (
         <div className="bg-white rounded-3xl border border-orange-200 shadow-lg p-6 sm:p-8 space-y-6 animate-fadeIn">
+          {/* Header Row */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4">
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -301,14 +547,92 @@ export const AIChefScreen: React.FC<AIChefScreenProps> = ({ onRecipeSaved }) => 
               )}
             </div>
 
-            <button
-              onClick={handleSaveToRecipes}
-              disabled={saving}
-              className="flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-sm font-bold transition shadow-md flex-shrink-0"
-            >
-              <Save className="w-4 h-4" />
-              {saving ? t('ai_saving') : t('ai_save_recipe')}
-            </button>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={handleSaveToRecipes}
+                disabled={saving}
+                className="flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-sm font-bold transition shadow-md disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                {saving ? t('ai_saving') : t('ai_save_recipe')}
+              </button>
+            </div>
+          </div>
+
+          {/* Interactive Refine & Adjust Card (Refinement Loop) */}
+          <div className="bg-gradient-to-br from-amber-50/80 to-orange-50/70 border border-orange-200/90 rounded-2xl p-5 space-y-3.5 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-orange-950 font-bold text-sm">
+                <MessageSquare className="w-4 h-4 text-orange-600" />
+                <span>{t('ai_refine_title')}</span>
+              </div>
+              {recipeHistory.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleRevert}
+                  className="inline-flex items-center gap-1.5 text-xs text-slate-600 hover:text-orange-600 font-semibold transition"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-orange-600" />
+                  <span>{t('ai_refine_revert')} ({recipeHistory.length})</span>
+                </button>
+              )}
+            </div>
+
+            <p className="text-xs text-slate-600">
+              {t('ai_refine_subtitle')}
+            </p>
+
+            {/* Quick Suggestion Chips */}
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { label: t('ai_refine_chip_less_salt'), prompt: 'хочу меньше солености' },
+                { label: t('ai_refine_chip_more_sauce'), prompt: 'хочу больше соуса, чтобы пропитывал лапшу' },
+                { label: t('ai_refine_chip_sweeter'), prompt: 'сделай соус более сладковатым' },
+                { label: t('ai_refine_chip_spicy'), prompt: 'добавь пикантности и умеренной остроты' },
+                { label: t('ai_refine_chip_faster'), prompt: 'упрости и сократи время приготовления' },
+              ].map((chip, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  disabled={refining}
+                  onClick={() => handleRefine(chip.prompt)}
+                  className="px-2.5 py-1 rounded-lg bg-white/90 hover:bg-white border border-orange-200 text-slate-700 text-xs font-medium transition shadow-2xs hover:border-orange-300 disabled:opacity-50"
+                >
+                  {chip.label}
+                </button>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => setShowAddIngModal(true)}
+                className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-bold transition flex items-center gap-1 shadow-2xs"
+              >
+                <Plus className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{t('ai_refine_add_ingredient_btn')}</span>
+              </button>
+            </div>
+
+            {/* Text Input Row */}
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                placeholder={t('ai_refine_placeholder')}
+                value={refinementPrompt}
+                onChange={(e) => setRefinementPrompt(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleRefine()}
+                disabled={refining}
+                className="flex-1 px-4 py-2.5 bg-white border border-orange-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-60"
+              />
+              <button
+                type="button"
+                onClick={() => handleRefine()}
+                disabled={refining || !refinementPrompt.trim()}
+                className="px-5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-2 shadow-xs disabled:opacity-50 flex-shrink-0"
+              >
+                {refining ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                {refining ? t('ai_refine_loading') : t('ai_refine_submit')}
+              </button>
+            </div>
           </div>
 
           {/* Why This Recipe Box */}
@@ -381,12 +705,15 @@ export const AIChefScreen: React.FC<AIChefScreenProps> = ({ onRecipeSaved }) => 
               {generatedRecipe.ingredients.map((ing: any, idx: number) => {
                 const isToBuy = ing.availability === 'to_buy';
                 const isStaple = ing.availability === 'staple';
+                const isMarinade = ing.role === 'marinade';
 
                 return (
                   <div
                     key={idx}
                     className={`p-3 rounded-xl border flex items-center justify-between text-xs transition ${
-                      isToBuy
+                      isMarinade
+                        ? 'bg-orange-50/60 border-orange-300 text-orange-950 font-medium'
+                        : isToBuy
                         ? 'bg-rose-50/50 border-rose-200 text-rose-900'
                         : isStaple
                         ? 'bg-amber-50/40 border-amber-200 text-amber-900'
@@ -396,6 +723,11 @@ export const AIChefScreen: React.FC<AIChefScreenProps> = ({ onRecipeSaved }) => 
                     <div className="space-y-0.5">
                       <div className="font-medium flex items-center gap-1.5">
                         <span>{ing.name}</span>
+                        {isMarinade && (
+                          <span className="px-1.5 py-0.5 bg-orange-200 text-orange-800 text-[10px] font-bold rounded">
+                            🥩 маринад
+                          </span>
+                        )}
                         {isToBuy && (
                           <span className="px-1.5 py-0.5 bg-rose-200 text-rose-800 text-[10px] font-bold rounded">
                             🛒 в покупки
@@ -426,25 +758,126 @@ export const AIChefScreen: React.FC<AIChefScreenProps> = ({ onRecipeSaved }) => 
               {t('ai_instructions_header')}
             </h4>
             <div className="space-y-3">
-              {generatedRecipe.steps.map((st: any) => (
-                <div key={st.step_number} className="p-4 bg-slate-50 rounded-xl flex gap-3 text-xs">
-                  <span className="w-6 h-6 flex-shrink-0 bg-orange-600 text-white rounded-full font-bold flex items-center justify-center text-xs">
-                    {st.step_number}
-                  </span>
-                  <div>
-                    <p className="text-slate-800 leading-relaxed font-medium">{st.instruction}</p>
-                    {st.duration_seconds && (
-                      <span className="inline-block mt-1 text-[11px] text-slate-400">
-                        ⏱ ~{t('common_minutes', { count: Math.round(st.duration_seconds / 60) })}
-                      </span>
-                    )}
+              {generatedRecipe.steps.map((st: any) => {
+                const isMarinadeStep = st.instruction?.toLowerCase().includes('марин');
+                return (
+                  <div
+                    key={st.step_number}
+                    className={`p-4 rounded-xl flex gap-3 text-xs border ${
+                      isMarinadeStep ? 'bg-orange-50/50 border-orange-200' : 'bg-slate-50 border-slate-100'
+                    }`}
+                  >
+                    <span
+                      className={`w-6 h-6 flex-shrink-0 text-white rounded-full font-bold flex items-center justify-center text-xs ${
+                        isMarinadeStep ? 'bg-amber-600' : 'bg-orange-600'
+                      }`}
+                    >
+                      {st.step_number}
+                    </span>
+                    <div>
+                      <p className="text-slate-800 leading-relaxed font-medium">{st.instruction}</p>
+                      {st.duration_seconds && (
+                        <span className="inline-flex items-center gap-1 mt-1 text-[11px] text-slate-500 font-semibold">
+                          <Timer className="w-3 h-3 text-slate-400" />
+                          <span>~{t('common_minutes', { count: Math.round(st.duration_seconds / 60) })}</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Add Custom Ingredient Modal */}
+      {showAddIngModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-scaleUp">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Plus className="w-4 h-4 text-emerald-600" />
+                <span>{t('ai_refine_add_ing_title')}</span>
+              </h3>
+              <button
+                onClick={() => setShowAddIngModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddCustomIngredient} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  {t('ai_refine_add_ing_name')} *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Например: Болгарский перец или Грибы шампиньоны"
+                  value={newIngName}
+                  onChange={(e) => setNewIngName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    {t('ai_refine_add_ing_qty')}
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="100"
+                    value={newIngQty}
+                    onChange={(e) => setNewIngQty(e.target.value)}
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    {t('ai_refine_add_ing_unit')}
+                  </label>
+                  <select
+                    value={newIngUnit}
+                    onChange={(e) => setNewIngUnit(e.target.value)}
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                  >
+                    <option value="g">г (g)</option>
+                    <option value="ml">мл (ml)</option>
+                    <option value="pcs">шт (pcs)</option>
+                    <option value="tbsp">ст. л. (tbsp)</option>
+                    <option value="tsp">ч. л. (tsp)</option>
+                    <option value="clove">зубчик (clove)</option>
+                    <option value="pinch">щепотка (pinch)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddIngModal(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                >
+                  {t('common_cancel')}
+                </button>
+                <button
+                  type="submit"
+                  disabled={!newIngName.trim()}
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-xs disabled:opacity-50"
+                >
+                  {t('ai_refine_add_ing_confirm')}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
     </div>
   );
 };
+
