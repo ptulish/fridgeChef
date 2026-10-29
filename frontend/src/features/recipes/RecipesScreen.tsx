@@ -40,9 +40,30 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onStartCooking, on
   const [addingToCart, setAddingToCart] = useState(false);
 
   // Substitution state in recipe modal
-  const [subModalIngredient, setSubModalIngredient] = useState<string | null>(null);
+  const [subModalIngredientData, setSubModalIngredientData] = useState<{
+    name: string;
+    quantity?: number | null;
+    unit?: string;
+    role?: string;
+  } | null>(null);
   const [subLoading, setSubLoading] = useState(false);
-  const [subOptions, setSubOptions] = useState<Array<{ name: string; notes: string; in_pantry: boolean; pantry_item_id?: string | null }>>([]);
+  const [subOptions, setSubOptions] = useState<
+    Array<{
+      name: string;
+      clean_name: string;
+      notes: string;
+      in_pantry: boolean;
+      pantry_item_id?: string | null;
+      suggested_quantity?: number | null;
+      suggested_unit?: string | null;
+      ratio?: number | null;
+      conversion_explanation?: string | null;
+    }>
+  >([]);
+
+  // Feedback states
+  const [addedToCartMap, setAddedToCartMap] = useState<Record<string, boolean>>({});
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const loadData = async () => {
     try {
@@ -83,20 +104,114 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onStartCooking, on
     }
   };
 
-  const handleOpenSubstitutions = async (ingName: string) => {
-    setSubModalIngredient(ingName);
+  const handleOpenSubstitutions = async (
+    ing: { ingredient_name_snapshot: string; quantity: number | null; unit: string; role?: string },
+    scaledQty: any
+  ) => {
+    const numQty = typeof scaledQty === 'number' ? scaledQty : parseFloat(scaledQty) || ing.quantity || null;
+    setSubModalIngredientData({
+      name: ing.ingredient_name_snapshot,
+      quantity: numQty,
+      unit: ing.unit,
+      role: ing.role,
+    });
     setSubLoading(true);
     setSubOptions([]);
     try {
       const resp = await api.substituteIngredient({
-        ingredient_name: ingName,
+        ingredient_name: ing.ingredient_name_snapshot,
         recipe_name: selectedRecipe?.title,
+        quantity: numQty,
+        unit: ing.unit,
       });
       setSubOptions(resp.substitutions || []);
     } catch (err) {
       console.error(err);
     } finally {
       setSubLoading(false);
+    }
+  };
+
+  const handleApplySubstitution = (sub: {
+    name: string;
+    clean_name?: string;
+    suggested_quantity?: number | null;
+    suggested_unit?: string | null;
+    conversion_explanation?: string | null;
+  }) => {
+    if (!selectedRecipe || !selectedVersionId || !subModalIngredientData) return;
+
+    const oldName = subModalIngredientData.name;
+    const newName = sub.clean_name || sub.name;
+    const newQty =
+      sub.suggested_quantity !== undefined && sub.suggested_quantity !== null
+        ? sub.suggested_quantity
+        : subModalIngredientData.quantity ?? null;
+    const newUnit = sub.suggested_unit || subModalIngredientData.unit || 'g';
+
+    const factor = servings / (selectedRecipe.base_servings || 1);
+    const unscaledQty = newQty !== null && factor > 0 ? Number((newQty / factor).toFixed(2)) : newQty;
+
+    const updatedVersions = selectedRecipe.versions.map((ver) => {
+      if (ver.id !== selectedVersionId) return ver;
+      const updatedIngredients = ver.ingredients.map((ing) => {
+        if (ing.ingredient_name_snapshot.toLowerCase() === oldName.toLowerCase()) {
+          return {
+            ...ing,
+            ingredient_name_snapshot: newName,
+            quantity: unscaledQty,
+            unit: newUnit,
+            preparation_note: sub.conversion_explanation || ing.preparation_note,
+          };
+        }
+        return ing;
+      });
+      return {
+        ...ver,
+        ingredients: updatedIngredients,
+      };
+    });
+
+    setSelectedRecipe({
+      ...selectedRecipe,
+      versions: updatedVersions,
+    });
+
+    setSubModalIngredientData(null);
+    setToastMessage(
+      t('substitute_applied', {
+        oldName,
+        newName,
+        qty: newQty ?? '',
+        unit: newUnit,
+      })
+    );
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleAddSingleItemToCart = async (
+    ingName: string,
+    qty?: any,
+    unit?: string,
+    e?: React.MouseEvent
+  ) => {
+    e?.stopPropagation();
+    try {
+      const numQty = typeof qty === 'number' ? qty : parseFloat(qty) || null;
+      await api.addShoppingItem({
+        item_name: ingName,
+        quantity: numQty,
+        unit: unit,
+        recipe_id: selectedRecipe?.id,
+      });
+      setAddedToCartMap((prev) => ({ ...prev, [ingName]: true }));
+      setToastMessage(t('recipes_cart_single_added', { name: ingName }));
+      setTimeout(() => {
+        setAddedToCartMap((prev) => ({ ...prev, [ingName]: false }));
+        setToastMessage(null);
+      }, 2500);
+    } catch (err) {
+      alert(t('common_error', { err: String(err) }));
     }
   };
 
@@ -463,7 +578,12 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onStartCooking, on
 
       {/* Detailed Recipe Modal */}
       {selectedRecipe && currentVersion && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedRecipe(null);
+          }}
+        >
           <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
             {/* Modal Header */}
             <div className="p-5 sm:p-6 border-b border-slate-100 flex items-start justify-between">
@@ -598,7 +718,7 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onStartCooking, on
                 </div>
               )}
 
-              {/* Ingredients List with Sub Block */}
+              {/* Ingredients List with Role Blocks & Cart Icon */}
               <div className="space-y-4">
                 <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
                   {meatIng
@@ -606,36 +726,117 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onStartCooking, on
                     : t('recipes_ingredients_for_servings', { servings })}
                 </h4>
 
-                <div className="border border-slate-200 bg-white rounded-2xl p-4 divide-y divide-slate-100">
-                  {currentVersion.ingredients.map((ing, idx) => {
+                {(() => {
+                  const marinadeIngs = currentVersion.ingredients.filter((i) => i.role === 'marinade');
+                  const sauceIngs = currentVersion.ingredients.filter((i) => i.role === 'main_sauce');
+                  const baseIngs = currentVersion.ingredients.filter(
+                    (i) => i.role !== 'marinade' && i.role !== 'main_sauce'
+                  );
+
+                  const renderIngredientRow = (ing: (typeof currentVersion.ingredients)[0], idx: number) => {
                     const factor = servings / (selectedRecipe.base_servings || 1);
                     const scaledQty =
                       ing.quantity !== null && ing.scalable
                         ? (ing.quantity * factor).toFixed(1)
                         : ing.quantity;
+                    const isAdded = addedToCartMap[ing.ingredient_name_snapshot];
 
                     return (
-                      <div key={idx} className="py-2 flex items-center justify-between text-xs text-slate-700 gap-2">
-                        <div>
+                      <div key={idx} className="py-2.5 flex items-center justify-between text-xs text-slate-700 gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-medium text-slate-800">{ing.ingredient_name_snapshot}</span>
                           {ing.preparation_note && (
-                            <span className="text-slate-400 italic ml-1">({ing.preparation_note})</span>
+                            <span className="text-slate-400 italic">({ing.preparation_note})</span>
                           )}
                           <button
                             type="button"
-                            onClick={() => handleOpenSubstitutions(ing.ingredient_name_snapshot)}
-                            className="ml-2 text-[10px] text-orange-600 font-semibold hover:underline"
+                            onClick={() => handleOpenSubstitutions(ing, scaledQty)}
+                            className="text-[10px] text-orange-600 font-semibold hover:underline flex items-center gap-0.5 ml-1"
+                            title={t('substitute_btn')}
                           >
-                            🔄 {t('substitute_btn')}
+                            <RefreshCw className="w-2.5 h-2.5" />
+                            <span>{t('substitute_btn')}</span>
                           </button>
                         </div>
-                        <span className="font-bold text-slate-900 whitespace-nowrap">
-                          {scaledQty !== null ? `${scaledQty} ${ing.unit}` : ing.unit}
-                        </span>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="font-bold text-slate-900 whitespace-nowrap">
+                            {scaledQty !== null ? `${scaledQty} ${ing.unit}` : ing.unit}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleAddSingleItemToCart(ing.ingredient_name_snapshot, scaledQty, ing.unit, e)}
+                            className={`p-1.5 rounded-lg border transition ${
+                              isAdded
+                                ? 'bg-emerald-50 border-emerald-300 text-emerald-600'
+                                : 'bg-white border-slate-200 text-slate-400 hover:text-orange-600 hover:border-orange-300'
+                            }`}
+                            title={t('recipes_cart_single_added', { name: ing.ingredient_name_snapshot })}
+                          >
+                            {isAdded ? <Check className="w-3.5 h-3.5" /> : <ShoppingCart className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
                       </div>
                     );
-                  })}
-                </div>
+                  };
+
+                  return (
+                    <div className="space-y-3">
+                      {/* Marinade Block - ONLY shown if role === 'marinade' exists */}
+                      {marinadeIngs.length > 0 && (
+                        <div className="border border-amber-200 bg-amber-50/40 rounded-2xl p-4">
+                          <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-amber-200/60">
+                            <span className="text-xs font-bold text-amber-900 uppercase tracking-wide">
+                              {t('recipes_marinade_block')}
+                            </span>
+                            <span className="text-[10px] text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full font-medium">
+                              {marinadeIngs.length}
+                            </span>
+                          </div>
+                          <div className="divide-y divide-amber-200/50">
+                            {marinadeIngs.map((ing, idx) => renderIngredientRow(ing, idx))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Main Sauce Block - ONLY shown if role === 'main_sauce' exists */}
+                      {sauceIngs.length > 0 && (
+                        <div className="border border-indigo-200 bg-indigo-50/40 rounded-2xl p-4">
+                          <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-indigo-200/60">
+                            <span className="text-xs font-bold text-indigo-900 uppercase tracking-wide">
+                              {t('recipes_sauce_block')}
+                            </span>
+                            <span className="text-[10px] text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full font-medium">
+                              {sauceIngs.length}
+                            </span>
+                          </div>
+                          <div className="divide-y divide-indigo-200/50">
+                            {sauceIngs.map((ing, idx) => renderIngredientRow(ing, idx))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Base Ingredients Block */}
+                      {baseIngs.length > 0 && (
+                        <div className="border border-slate-200 bg-white rounded-2xl p-4">
+                          {(marinadeIngs.length > 0 || sauceIngs.length > 0) && (
+                            <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-slate-100">
+                              <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                                {t('recipes_base_block')}
+                              </span>
+                              <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full font-medium">
+                                {baseIngs.length}
+                              </span>
+                            </div>
+                          )}
+                          <div className="divide-y divide-slate-100">
+                            {baseIngs.map((ing, idx) => renderIngredientRow(ing, idx))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Steps */}
@@ -697,8 +898,13 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onStartCooking, on
       )}
 
       {/* Substitutions Sub-Modal */}
-      {subModalIngredient && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+      {subModalIngredientData && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSubModalIngredientData(null);
+          }}
+        >
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
@@ -707,11 +913,16 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onStartCooking, on
                   {t('substitute_title')}
                 </h3>
                 <span className="text-xs text-slate-500">
-                  Для: <strong className="text-orange-600">{subModalIngredient}</strong>
+                  Для: <strong className="text-orange-600">{subModalIngredientData.name}</strong>{' '}
+                  {subModalIngredientData.quantity !== null && subModalIngredientData.quantity !== undefined && (
+                    <span className="text-slate-400 font-normal">
+                      ({subModalIngredientData.quantity} {subModalIngredientData.unit})
+                    </span>
+                  )}
                 </span>
               </div>
               <button
-                onClick={() => setSubModalIngredient(null)}
+                onClick={() => setSubModalIngredientData(null)}
                 className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg"
               >
                 <X className="w-5 h-5" />
@@ -728,44 +939,99 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onStartCooking, on
                 {t('substitute_empty')}
               </p>
             ) : (
-              <div className="space-y-2.5 max-h-[50vh] overflow-y-auto">
-                {subOptions.map((sub, idx) => (
-                  <div
-                    key={idx}
-                    className={`p-3 rounded-2xl border flex flex-col justify-between gap-1.5 ${
-                      sub.in_pantry
-                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                        : 'bg-slate-50 border-slate-200 text-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-bold text-sm">{sub.name}</span>
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
-                          sub.in_pantry
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-slate-200 text-slate-600'
-                        }`}
+              <div className="space-y-3 max-h-[55vh] overflow-y-auto">
+                {subOptions.map((sub, idx) => {
+                  const displayName = sub.clean_name || sub.name;
+                  return (
+                    <div
+                      key={idx}
+                      className={`p-3.5 rounded-2xl border flex flex-col justify-between gap-2 transition ${
+                        sub.in_pantry
+                          ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+                          : 'bg-slate-50 border-slate-200 text-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-sm text-slate-900">{displayName}</span>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                            sub.in_pantry
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-slate-200 text-slate-600'
+                          }`}
+                        >
+                          {sub.in_pantry ? '✓ ' + t('substitute_in_stock') : t('substitute_not_in_stock')}
+                        </span>
+                      </div>
+
+                      {/* Recalculated dosage information */}
+                      {sub.suggested_quantity !== null && sub.suggested_quantity !== undefined && (
+                        <div className="p-2 bg-white/80 rounded-xl border border-slate-200/80 text-xs space-y-0.5">
+                          <div className="flex items-center gap-1.5 font-bold text-orange-700">
+                            <span>{t('substitute_calculated_label')}</span>
+                            <span className="text-sm text-slate-900">
+                              {sub.suggested_quantity} {sub.suggested_unit || ''}
+                            </span>
+                            {sub.ratio && sub.ratio !== 1 && (
+                              <span className="text-[10px] font-normal text-slate-500">
+                                ({t('substitute_ratio_label')} ×{sub.ratio})
+                              </span>
+                            )}
+                          </div>
+                          {sub.conversion_explanation && (
+                            <p className="text-[11px] text-slate-500 leading-tight">
+                              {sub.conversion_explanation}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {sub.notes && (
+                        <p className="text-xs text-slate-500 leading-relaxed">{sub.notes}</p>
+                      )}
+
+                      {/* In-Recipe Replacement Action Button */}
+                      <button
+                        type="button"
+                        onClick={() => handleApplySubstitution(sub)}
+                        className="mt-1 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
                       >
-                        {sub.in_pantry ? '✓ ' + t('substitute_in_stock') : t('substitute_not_in_stock')}
-                      </span>
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>{t('substitute_apply_btn')}</span>
+                      </button>
                     </div>
-                    <p className="text-xs text-slate-500">{sub.notes}</p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
             <div className="pt-2 flex justify-end border-t border-slate-100">
               <button
                 type="button"
-                onClick={() => setSubModalIngredient(null)}
+                onClick={() => setSubModalIngredientData(null)}
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition"
               >
                 {t('common_cancel')}
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 border border-slate-700 animate-in fade-in slide-in-from-bottom-2">
+          <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+            <Check className="w-4 h-4" />
+          </div>
+          <span className="text-sm font-medium">{toastMessage}</span>
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            className="text-slate-400 hover:text-white p-1 ml-1"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
     </div>

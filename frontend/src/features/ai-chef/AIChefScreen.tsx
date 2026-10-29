@@ -23,7 +23,8 @@ import {
   X,
   Flame,
   MessageSquare,
-  Timer
+  Timer,
+  ShoppingCart,
 } from 'lucide-react';
 
 interface AIChefScreenProps {
@@ -61,6 +62,28 @@ export const AIChefScreen: React.FC<AIChefScreenProps> = ({ onRecipeSaved }) => 
   const [newIngName, setNewIngName] = useState('');
   const [newIngQty, setNewIngQty] = useState<string>('');
   const [newIngUnit, setNewIngUnit] = useState('g');
+  const [addedToCartMap, setAddedToCartMap] = useState<Record<string, boolean>>({});
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const handleAddSingleItemToCart = async (ingName: string, qty?: any, unit?: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    try {
+      const numQty = typeof qty === 'number' ? qty : parseFloat(qty) || null;
+      await api.addShoppingItem({
+        item_name: ingName,
+        quantity: numQty,
+        unit: unit,
+      });
+      setAddedToCartMap((prev) => ({ ...prev, [ingName]: true }));
+      setToastMessage(t('recipes_cart_single_added', { name: ingName }));
+      setTimeout(() => {
+        setAddedToCartMap((prev) => ({ ...prev, [ingName]: false }));
+        setToastMessage(null);
+      }, 2500);
+    } catch (err) {
+      alert(t('common_error', { err: String(err) }));
+    }
+  };
 
   useEffect(() => {
     loadAIStatus();
@@ -559,7 +582,249 @@ export const AIChefScreen: React.FC<AIChefScreenProps> = ({ onRecipeSaved }) => 
             </div>
           </div>
 
-          {/* Interactive Refine & Adjust Card (Refinement Loop) */}
+          {/* Why This Recipe Box */}
+          {generatedRecipe.why_this_recipe && (
+            <div className="bg-orange-50/70 border border-orange-200 p-4 rounded-2xl text-xs text-orange-950 flex items-start gap-2.5">
+              <Lightbulb className="w-4 h-4 text-orange-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold">{t('ai_why_title')} </span>
+                <span>{generatedRecipe.why_this_recipe}</span>
+              </div>
+            </div>
+          )}
+
+          {/* KBJU Nutritional Target Cards */}
+          {generatedRecipe.macros_per_serving && (
+            <div className="bg-slate-50 border border-slate-200/80 p-4 rounded-2xl space-y-2">
+              <span className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                {t('ai_macros_title')}
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
+                  <span className="block text-xl font-black text-slate-800">
+                    {generatedRecipe.macros_per_serving.kcal}
+                  </span>
+                  <span className="text-[10px] uppercase font-bold text-slate-400">{t('ai_macros_kcal')}</span>
+                </div>
+                <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
+                  <span className="block text-xl font-black text-orange-600">
+                    {generatedRecipe.macros_per_serving.protein_g}g
+                  </span>
+                  <span className="text-[10px] uppercase font-bold text-slate-400">{t('ai_macros_protein')}</span>
+                </div>
+                <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
+                  <span className="block text-xl font-black text-amber-600">
+                    {generatedRecipe.macros_per_serving.fat_g}g
+                  </span>
+                  <span className="text-[10px] uppercase font-bold text-slate-400">{t('ai_macros_fat')}</span>
+                </div>
+                <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
+                  <span className="block text-xl font-black text-emerald-600">
+                    {generatedRecipe.macros_per_serving.carbs_g}g
+                  </span>
+                  <span className="text-[10px] uppercase font-bold text-slate-400">{t('ai_macros_carbs')}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Equipment used */}
+          {generatedRecipe.equipment_used && generatedRecipe.equipment_used.length > 0 && (
+            <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100">
+              <Utensils className="w-4 h-4 text-orange-500 flex-shrink-0" />
+              <span className="font-bold">{t('ai_equipment_title')}:</span>
+              <div className="flex flex-wrap gap-1.5">
+                {generatedRecipe.equipment_used.map((eq: string, idx: number) => (
+                  <span key={idx} className="bg-white px-2 py-0.5 rounded-md border border-slate-200 text-slate-700 font-medium">
+                    {eq}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Ingredients Breakdown with Dedicated Blocks */}
+          <div className="space-y-4">
+            <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2">
+              {t('ai_ingredients_header', { servings: generatedRecipe.base_servings || 1 })}
+            </h4>
+
+            {(() => {
+              const marinadeIngs = generatedRecipe.ingredients.filter((i: any) => i.role === 'marinade');
+              const sauceIngs = generatedRecipe.ingredients.filter((i: any) => i.role === 'main_sauce');
+              const baseIngs = generatedRecipe.ingredients.filter(
+                (i: any) => i.role !== 'marinade' && i.role !== 'main_sauce'
+              );
+
+              const renderIngItem = (ing: any, idx: number) => {
+                const isToBuy = ing.availability === 'to_buy';
+                const isStaple = ing.availability === 'staple';
+                const isMarinade = ing.role === 'marinade';
+                const isSauce = ing.role === 'main_sauce';
+                const isAdded = addedToCartMap[ing.name];
+
+                return (
+                  <div
+                    key={idx}
+                    className={`p-3 rounded-xl border flex items-center justify-between text-xs transition ${
+                      isMarinade
+                        ? 'bg-amber-50/70 border-amber-300 text-amber-950 font-medium'
+                        : isSauce
+                        ? 'bg-indigo-50/70 border-indigo-200 text-indigo-950 font-medium'
+                        : isToBuy
+                        ? 'bg-rose-50/50 border-rose-200 text-rose-900'
+                        : isStaple
+                        ? 'bg-amber-50/40 border-amber-200 text-amber-900'
+                        : 'bg-slate-50 border-slate-100 text-slate-700'
+                    }`}
+                  >
+                    <div className="space-y-0.5">
+                      <div className="font-medium flex items-center gap-1.5 flex-wrap">
+                        <span>{ing.name}</span>
+                        {isMarinade && (
+                          <span className="px-1.5 py-0.5 bg-amber-200 text-amber-800 text-[10px] font-bold rounded">
+                            🥩 {t('recipes_marinade_block')}
+                          </span>
+                        )}
+                        {isSauce && (
+                          <span className="px-1.5 py-0.5 bg-indigo-200 text-indigo-800 text-[10px] font-bold rounded">
+                            🥣 {t('recipes_sauce_block')}
+                          </span>
+                        )}
+                        {isToBuy && (
+                          <span className="px-1.5 py-0.5 bg-rose-200 text-rose-800 text-[10px] font-bold rounded">
+                            🛒 {t('status_to_buy') || 'в покупки'}
+                          </span>
+                        )}
+                        {isStaple && (
+                          <span className="px-1.5 py-0.5 bg-amber-200 text-amber-800 text-[10px] font-bold rounded">
+                            🧂 {t('is_staple_label') || 'база'}
+                          </span>
+                        )}
+                      </div>
+                      {ing.preparation_note && (
+                        <p className="text-[11px] text-slate-400 italic">{ing.preparation_note}</p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                      <span className="font-bold text-orange-600 whitespace-nowrap">
+                        {ing.quantity} {ing.unit}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => handleAddSingleItemToCart(ing.name, ing.quantity, ing.unit, e)}
+                        className={`p-1.5 rounded-lg border transition ${
+                          isAdded
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-600'
+                            : 'bg-white border-slate-200 text-slate-400 hover:text-orange-600 hover:border-orange-300'
+                        }`}
+                        title={t('recipes_cart_single_added', { name: ing.name })}
+                      >
+                        {isAdded ? <Check className="w-3.5 h-3.5" /> : <ShoppingCart className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+                );
+              };
+
+              return (
+                <div className="space-y-4">
+                  {/* Dedicated Marinade Block - ONLY if role === 'marinade' exists */}
+                  {marinadeIngs.length > 0 && (
+                    <div className="border border-amber-300/80 bg-amber-50/40 rounded-2xl p-4 space-y-2.5">
+                      <div className="flex items-center gap-2 pb-1 border-b border-amber-200/70">
+                        <span className="text-xs font-bold text-amber-900 uppercase tracking-wide">
+                          {t('recipes_marinade_block')}
+                        </span>
+                        <span className="text-[10px] text-amber-700 bg-amber-200/60 px-2 py-0.5 rounded-full font-medium">
+                          {marinadeIngs.length}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                        {marinadeIngs.map((ing: any, idx: number) => renderIngItem(ing, idx))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Dedicated Sauce Block - ONLY if role === 'main_sauce' exists */}
+                  {sauceIngs.length > 0 && (
+                    <div className="border border-indigo-200 bg-indigo-50/40 rounded-2xl p-4 space-y-2.5">
+                      <div className="flex items-center gap-2 pb-1 border-b border-indigo-200/70">
+                        <span className="text-xs font-bold text-indigo-900 uppercase tracking-wide">
+                          {t('recipes_sauce_block')}
+                        </span>
+                        <span className="text-[10px] text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full font-medium">
+                          {sauceIngs.length}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                        {sauceIngs.map((ing: any, idx: number) => renderIngItem(ing, idx))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Base Ingredients Block */}
+                  {baseIngs.length > 0 && (
+                    <div className="space-y-2">
+                      {(marinadeIngs.length > 0 || sauceIngs.length > 0) && (
+                        <div className="flex items-center gap-2 pb-1">
+                          <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                            {t('recipes_base_block')}
+                          </span>
+                          <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full font-medium">
+                            {baseIngs.length}
+                          </span>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {baseIngs.map((ing: any, idx: number) => renderIngItem(ing, idx))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Steps */}
+          <div>
+            <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-3">
+              {t('ai_instructions_header')}
+            </h4>
+            <div className="space-y-3">
+              {generatedRecipe.steps.map((st: any) => {
+                const isMarinadeStep = st.instruction?.toLowerCase().includes('марин');
+                return (
+                  <div
+                    key={st.step_number}
+                    className={`p-4 rounded-xl flex gap-3 text-xs border ${
+                      isMarinadeStep ? 'bg-orange-50/50 border-orange-200' : 'bg-slate-50 border-slate-100'
+                    }`}
+                  >
+                    <span
+                      className={`w-6 h-6 flex-shrink-0 text-white rounded-full font-bold flex items-center justify-center text-xs ${
+                        isMarinadeStep ? 'bg-amber-600' : 'bg-orange-600'
+                      }`}
+                    >
+                      {st.step_number}
+                    </span>
+                    <div>
+                      <p className="text-slate-800 leading-relaxed font-medium">{st.instruction}</p>
+                      {st.duration_seconds && (
+                        <span className="inline-flex items-center gap-1 mt-1 text-[11px] text-slate-500 font-semibold">
+                          <Timer className="w-3 h-3 text-slate-400" />
+                          <span>~{t('common_minutes', { count: Math.round(st.duration_seconds / 60) })}</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Interactive Refine & Adjust Card (Placed at the bottom of the recipe) */}
           <div className="bg-gradient-to-br from-amber-50/80 to-orange-50/70 border border-orange-200/90 rounded-2xl p-5 space-y-3.5 shadow-xs">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-orange-950 font-bold text-sm">
@@ -634,166 +899,17 @@ export const AIChefScreen: React.FC<AIChefScreenProps> = ({ onRecipeSaved }) => 
               </button>
             </div>
           </div>
-
-          {/* Why This Recipe Box */}
-          {generatedRecipe.why_this_recipe && (
-            <div className="bg-orange-50/70 border border-orange-200 p-4 rounded-2xl text-xs text-orange-950 flex items-start gap-2.5">
-              <Lightbulb className="w-4 h-4 text-orange-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <span className="font-bold">{t('ai_why_title')} </span>
-                <span>{generatedRecipe.why_this_recipe}</span>
-              </div>
-            </div>
-          )}
-
-          {/* KBJU Nutritional Target Cards */}
-          {generatedRecipe.macros_per_serving && (
-            <div className="bg-slate-50 border border-slate-200/80 p-4 rounded-2xl space-y-2">
-              <span className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                {t('ai_macros_title')}
-              </span>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-                <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
-                  <span className="block text-xl font-black text-slate-800">
-                    {generatedRecipe.macros_per_serving.kcal}
-                  </span>
-                  <span className="text-[10px] uppercase font-bold text-slate-400">{t('ai_macros_kcal')}</span>
-                </div>
-                <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
-                  <span className="block text-xl font-black text-orange-600">
-                    {generatedRecipe.macros_per_serving.protein_g}g
-                  </span>
-                  <span className="text-[10px] uppercase font-bold text-slate-400">{t('ai_macros_protein')}</span>
-                </div>
-                <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
-                  <span className="block text-xl font-black text-amber-600">
-                    {generatedRecipe.macros_per_serving.fat_g}g
-                  </span>
-                  <span className="text-[10px] uppercase font-bold text-slate-400">{t('ai_macros_fat')}</span>
-                </div>
-                <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
-                  <span className="block text-xl font-black text-emerald-600">
-                    {generatedRecipe.macros_per_serving.carbs_g}g
-                  </span>
-                  <span className="text-[10px] uppercase font-bold text-slate-400">{t('ai_macros_carbs')}</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Equipment used */}
-          {generatedRecipe.equipment_used && generatedRecipe.equipment_used.length > 0 && (
-            <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100">
-              <Utensils className="w-4 h-4 text-orange-500 flex-shrink-0" />
-              <span className="font-bold">{t('ai_equipment_title')}:</span>
-              <div className="flex flex-wrap gap-1.5">
-                {generatedRecipe.equipment_used.map((eq: string, idx: number) => (
-                  <span key={idx} className="bg-white px-2 py-0.5 rounded-md border border-slate-200 text-slate-700 font-medium">
-                    {eq}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Ingredients Breakdown */}
-          <div>
-            <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-3">
-              {t('ai_ingredients_header', { servings: generatedRecipe.base_servings || 1 })}
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {generatedRecipe.ingredients.map((ing: any, idx: number) => {
-                const isToBuy = ing.availability === 'to_buy';
-                const isStaple = ing.availability === 'staple';
-                const isMarinade = ing.role === 'marinade';
-
-                return (
-                  <div
-                    key={idx}
-                    className={`p-3 rounded-xl border flex items-center justify-between text-xs transition ${
-                      isMarinade
-                        ? 'bg-orange-50/60 border-orange-300 text-orange-950 font-medium'
-                        : isToBuy
-                        ? 'bg-rose-50/50 border-rose-200 text-rose-900'
-                        : isStaple
-                        ? 'bg-amber-50/40 border-amber-200 text-amber-900'
-                        : 'bg-slate-50 border-slate-100 text-slate-700'
-                    }`}
-                  >
-                    <div className="space-y-0.5">
-                      <div className="font-medium flex items-center gap-1.5">
-                        <span>{ing.name}</span>
-                        {isMarinade && (
-                          <span className="px-1.5 py-0.5 bg-orange-200 text-orange-800 text-[10px] font-bold rounded">
-                            🥩 маринад
-                          </span>
-                        )}
-                        {isToBuy && (
-                          <span className="px-1.5 py-0.5 bg-rose-200 text-rose-800 text-[10px] font-bold rounded">
-                            🛒 в покупки
-                          </span>
-                        )}
-                        {isStaple && (
-                          <span className="px-1.5 py-0.5 bg-amber-200 text-amber-800 text-[10px] font-bold rounded">
-                            🧂 база
-                          </span>
-                        )}
-                      </div>
-                      {ing.preparation_note && (
-                        <p className="text-[11px] text-slate-400 italic">{ing.preparation_note}</p>
-                      )}
-                    </div>
-                    <span className="font-bold text-orange-600 flex-shrink-0 ml-2">
-                      {ing.quantity} {ing.unit}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Steps */}
-          <div>
-            <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-3">
-              {t('ai_instructions_header')}
-            </h4>
-            <div className="space-y-3">
-              {generatedRecipe.steps.map((st: any) => {
-                const isMarinadeStep = st.instruction?.toLowerCase().includes('марин');
-                return (
-                  <div
-                    key={st.step_number}
-                    className={`p-4 rounded-xl flex gap-3 text-xs border ${
-                      isMarinadeStep ? 'bg-orange-50/50 border-orange-200' : 'bg-slate-50 border-slate-100'
-                    }`}
-                  >
-                    <span
-                      className={`w-6 h-6 flex-shrink-0 text-white rounded-full font-bold flex items-center justify-center text-xs ${
-                        isMarinadeStep ? 'bg-amber-600' : 'bg-orange-600'
-                      }`}
-                    >
-                      {st.step_number}
-                    </span>
-                    <div>
-                      <p className="text-slate-800 leading-relaxed font-medium">{st.instruction}</p>
-                      {st.duration_seconds && (
-                        <span className="inline-flex items-center gap-1 mt-1 text-[11px] text-slate-500 font-semibold">
-                          <Timer className="w-3 h-3 text-slate-400" />
-                          <span>~{t('common_minutes', { count: Math.round(st.duration_seconds / 60) })}</span>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
         </div>
       )}
 
       {/* Manual Add Custom Ingredient Modal */}
       {showAddIngModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowAddIngModal(false);
+          }}
+        >
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-scaleUp">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -875,6 +991,23 @@ export const AIChefScreen: React.FC<AIChefScreenProps> = ({ onRecipeSaved }) => 
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 border border-slate-700 animate-in fade-in slide-in-from-bottom-2">
+          <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+            <Check className="w-4 h-4" />
+          </div>
+          <span className="text-sm font-medium">{toastMessage}</span>
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            className="text-slate-400 hover:text-white p-1 ml-1"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
     </div>

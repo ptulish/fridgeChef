@@ -68,9 +68,9 @@ export const en = {
   recipes_version_history: 'Version Evolution',
   recipes_base_version: 'Base Version (Original)',
   recipes_adapted_version: 'Personal Adaptation',
-  recipes_marinade_block: 'Marinade Ingredients',
-  recipes_sauce_block: 'Main Sauce Ingredients',
-  recipes_base_block: 'Core Ingredients',
+  recipes_marinade_block: '🥩 Marinade',
+  recipes_sauce_block: '🥣 Main Sauce',
+  recipes_base_block: '🥗 Main Ingredients',
   recipes_instructions: 'Step-by-Step Instructions',
 
   // Cooking
@@ -316,7 +316,7 @@ export const en = {
   // Shopping Extended
   shopping_loading: 'Loading shopping list...',
   shopping_item_name_label: 'Product Name',
-  shopping_item_placeholder: 'e.g. Kikkoman Soy Sauce',
+  shopping_item_placeholder: 'e.g. Soy Sauce',
   shopping_one_click_desc: 'You can add missing ingredients from any recipe with one click.',
 
   // Extra keys for complete localization
@@ -436,6 +436,15 @@ export const en = {
   substitute_not_in_stock: 'Requires store run',
   substitute_empty: 'No obvious substitutes found in your pantry. Consider adapting recipe.',
   substitute_use_btn: 'Use this substitute',
+  substitute_apply_btn: 'Replace in Recipe',
+  substitute_calculated_label: 'Recommended dosage:',
+  substitute_ratio_label: 'Conversion ratio:',
+  substitute_applied: 'Ingredient "{oldName}" replaced with "{newName}" ({qty} {unit})',
+  substitute_no_options: 'No suitable substitutes found',
+  recipes_cart_single_added: '"{name}" added to shopping list',
+  status_to_buy: 'To buy',
+  pantry_item_added_toast: 'Product "{name}" added to pantry',
+  pantry_catalog_popular_title: 'Popular Products (Catalog)',
 
   // Quick Feedback Chips
   feedback_quick_title: 'Quick Cooking Notes',

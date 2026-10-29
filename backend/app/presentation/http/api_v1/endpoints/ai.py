@@ -36,13 +36,20 @@ class SubstituteRequest(BaseModel):
     ingredient_name: str
     recipe_name: Optional[str] = None
     recipe_id: Optional[str] = None
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
 
 
 class SubstituteOption(BaseModel):
     name: str
+    clean_name: str
     notes: str
     in_pantry: bool
     pantry_item_id: Optional[str] = None
+    suggested_quantity: Optional[float] = None
+    suggested_unit: Optional[str] = None
+    ratio: Optional[float] = 1.0
+    conversion_explanation: Optional[str] = None
 
 
 class SubstituteResponse(BaseModel):
@@ -379,55 +386,82 @@ async def substitute_ingredient(
     if not target_name:
         raise HTTPException(status_code=400, detail="Название ингредиента не может быть пустым")
 
+    orig_qty = payload.quantity
+    orig_unit = payload.unit or "g"
+
     # Fetch user's in-stock pantry items
     pantry_items = await pantry_repo.get_user_pantry(current_user.id)
     available_items = [
         p for p in pantry_items
-        if p.status != "out" and p.ingredient and p.ingredient.canonical_name
+        if p.status != "out" and (p.ingredient or p.custom_ingredient_name)
     ]
-    pantry_names = [p.ingredient.canonical_name for p in available_items]
+    pantry_names = [
+        (p.ingredient.canonical_name if p.ingredient else p.custom_ingredient_name)
+        for p in available_items
+    ]
 
-    # Predefined culinary substitutions dictionary for smart fallback & validation
+    # Predefined culinary substitutions dictionary with conversion ratios (NO BRANDS!)
+    # Format: (display_name, clean_name, notes, ratio, target_unit_override, explanation)
     SUBSTITUTION_KNOWLEDGE = {
-        "уксус": [
-            ("Яблочный уксус (1 ч. л.) + щепотка сахара", "Мягкий кисло-сладкий баланс"),
-            ("Сок лимона (1 ст. л.)", "Свежая цитрусовая кислинка"),
-        ],
-        "соевый соус": [
-            ("Соль + вода + капля вустерского соуса", "Базовый соленый баланс"),
-            ("Терияки соус", "Сладковатый и густой соус, уменьшить сахар"),
-        ],
-        "курица": [
-            ("Индейка (филе)", "1:1 по времени обжарки и текстуре"),
-            ("Свиная вырезка", "Нарезать тонкими полосками для вока"),
-        ],
         "крахмал": [
-            ("Пшеничная мука", "Развести в холодной воде в пропорции 1:1"),
-            ("Картофельный крахмал", "Использовать в тех же пропорциях для загущения"),
-        ],
-        "сливки": [
-            ("Молоко + сливочное масло", "Растопить сливочное масло в теплом молоке"),
-            ("Сметана", "Добавлять в самом конце на слабом огне"),
-        ],
-        "чеснок": [
-            ("Сушеный гранулированный чеснок", "1/4 ч. л. вместо зубчика"),
-            ("Зеленый лук (белая часть)", "Мягкая луковая нота для соуса"),
+            ("Пшеничная мука", "Пшеничная мука", "Развести в холодной воде 1:1 перед добавлением", 1.5, None, "Мука слабее крахмала: требуется в 1.5–2 раза больше для загущения"),
+            ("Картофельный крахмал", "Картофельный крахмал", "Использовать в тех же пропорциях для соуса", 1.0, None, "Используется 1:1 в тех же пропорциях"),
         ],
         "сахар": [
-            ("Мед", "3/4 от указанного объема сахара"),
-            ("Соус терияки", "Уже содержит сладость и глазурь"),
+            ("Мёд", "Мёд", "Натуральная сладость и глазурь", 0.75, None, "Мёд слаще сахара: требуется ~75% от указанного объема"),
+            ("Кленовый сироп", "Кленовый сироп", "Мягкая сладость", 0.8, None, "Используйте 80% от объема сахара"),
+        ],
+        "соевый соус": [
+            ("Соус Терияки", "Соус Терияки", "Густой сладко-соленый соус", 1.0, None, "1:1, но уменьшите количество сахара/меда в рецепте"),
+            ("Соль + вода", "Соль", "Развести щепотку соли в воде", 0.25, "tsp", "1/4 ч. л. соли + 2 ст. л. воды"),
+        ],
+        "уксус": [
+            ("Сок лимона", "Сок лимона", "Свежая цитрусовая кислинка", 1.0, None, "1:1 по объему вместо уксуса"),
+            ("Рисовый уксус", "Рисовый уксус", "Мягкий азиатский уксус", 1.0, None, "1:1 мягкая кислинка"),
+            ("Белый винный уксус", "Белый винный уксус", "Умеренная кислотность", 1.0, None, "1:1"),
+        ],
+        "курица": [
+            ("Индейка (филе)", "Индейка (филе)", "1:1 по времени обжарки и текстуре", 1.0, "g", "1:1 одинаковая сочность и нарезка"),
+            ("Свиная вырезка", "Свиная вырезка", "Нарезать тонкими полосками для вока", 1.0, "g", "1:1 быстрая обжарка"),
+            ("Тофу", "Тофу", "Растительный аналог белка", 1.0, "g", "1:1 нарезать кубиками"),
+        ],
+        "свинина": [
+            ("Говядина", "Говядина", "Нарезать тонкими полосками поперек волокон", 1.0, "g", "1:1 обжаривать быстро на сильном огне"),
+            ("Куриное филе", "Куриное филе", "Сочное нежное мясо", 1.0, "g", "1:1"),
+            ("Индейка (филе)", "Индейка (филе)", "Нежная альтернатива", 1.0, "g", "1:1"),
+        ],
+        "говядина": [
+            ("Свинина (гуляш)", "Свинина (гуляш)", "Нарезать брусочками", 1.0, "g", "1:1"),
+            ("Индейка (филе)", "Индейка (филе)", "Нежное диетическое филе", 1.0, "g", "1:1"),
+        ],
+        "чеснок": [
+            ("Сушеный чеснок", "Сушеный чеснок", "Гранулированный чеснок", 0.25, "tsp", "1 зубчик свежего чеснока ≈ 1/4 ч. л. сухого чеснока"),
+            ("Зеленый лук (белая часть)", "Зеленый лук", "Мягкая луковая нота для соуса", 1.0, "pcs", "1 стебель зеленого лука вместо зубчика"),
+        ],
+        "сливки": [
+            ("Молоко + сливочное масло", "Молоко", "Растопить сливочное масло в теплом молоке", 1.0, "ml", "75% молока + 25% сливочного масла"),
+            ("Сметана", "Сметана", "Добавлять в самом конце на слабом огне", 0.8, "g", "Гуще сливок: берется около 80% от объема"),
         ],
         "масло": [
-            ("Оливковое масло", "Для жарки на умеренном огне"),
-            ("Сливочное масло", "Нежный сливочный вкус"),
+            ("Оливковое масло", "Оливковое масло", "Для жарки на умеренном огне", 1.0, None, "1:1 по объему"),
+            ("Сливочное масло", "Сливочное масло", "Нежный сливочный вкус", 1.0, "g", "1:1"),
         ],
         "лук": [
-            ("Репчатый лук тонкими перьями", "Ошпарить кипятком для мягкости"),
-            ("Свежая зелень (петрушка/кинза)", "Свежая пряная нотка"),
+            ("Лук-порей", "Лук-порей", "Нежная луковая основа", 1.0, "pcs", "1:1 нарезать кольцами"),
+            ("Зеленый лук", "Зеленый лук", "Свежая пряная нотка", 1.0, "g", "Добавлять в самом конце"),
         ],
     }
 
     substitutions: List[SubstituteOption] = []
+
+    def calc_quantity(ratio: float, override_unit: Optional[str]) -> Tuple[Optional[float], str]:
+        unit = override_unit or orig_unit
+        if orig_qty is None:
+            return None, unit
+        new_q = round(float(orig_qty) * ratio, 1)
+        if new_q.is_integer():
+            new_q = float(int(new_q))
+        return new_q, unit
 
     # Try Gemini if key configured
     if ai_provider.has_api_key:
@@ -435,37 +469,51 @@ async def substitute_ingredient(
             from google import genai
             client = genai.Client(api_key=settings.GEMINI_API_KEY)
             prompt = (
-                f"Кулинарная задача: в рецепте '{payload.recipe_name or 'блюдо'}' требуется '{target_name}'.\n"
+                f"Кулинарная задача: в рецепте '{payload.recipe_name or 'блюдо'}' требуется '{target_name}' в количестве {orig_qty or ''} {orig_unit}.\n"
                 f"В наличии у повара в холодильнике следующие продукты:\n"
                 f"{', '.join(pantry_names) if pantry_names else 'Пусто'}.\n\n"
+                f"СТРОГИЙ ЗАПРЕТ БРЕНДОВ: не используй названия брендов (никаких Kikkoman, Maizena и т.п.).\n"
                 f"Подбери 2-3 реалистичные кулинарные замены для '{target_name}', отдавая строгий приоритет продуктам из холодильника повара.\n"
-                f"Ответь строго JSON-списком объектов: [{{'name': '...', 'notes': '...', 'in_pantry': true/false}}]."
+                f"Для каждой замены укажи коэффициент пересчета количества (ratio) относительно оригинала и понятное кулинарное объяснение пересчета.\n"
+                f"Ответь строго JSON-списком объектов: [{{'name': '...', 'clean_name': '...', 'notes': '...', 'ratio': 1.0, 'suggested_unit': '{orig_unit}', 'conversion_explanation': '...', 'in_pantry': true/false}}]."
             )
             resp = client.models.generate_content(
                 model=settings.GEMINI_MODEL,
                 contents=prompt,
             )
             raw = resp.text.strip()
-            # Clean markdown codeblocks
             raw = re.sub(r"^```(?:json)?\s*", "", raw)
             raw = re.sub(r"\s*```$", "", raw)
             parsed = json.loads(raw)
             for item in parsed:
-                # Check if matches any pantry item
+                clean_name = item.get("clean_name", item.get("name", ""))
+                # Strip known brand prefixes
+                for brand in ("Maizena ", "Kikkoman ", "Shan’shi ", "Shan'shi ", "Go-Tan ", "OBAP ", "Clever ", "BILLA "):
+                    clean_name = re.sub(re.escape(brand), "", clean_name, flags=re.IGNORECASE).strip()
+
                 found_pantry = next(
-                    (p for p in available_items if p.ingredient.canonical_name.lower() in item["name"].lower() or item["name"].lower() in p.ingredient.canonical_name.lower()),
+                    (p for p in available_items if (p.ingredient and p.ingredient.canonical_name.lower() in clean_name.lower()) or (p.custom_ingredient_name and p.custom_ingredient_name.lower() in clean_name.lower())),
                     None
                 )
+                ratio = float(item.get("ratio", 1.0))
+                s_unit = item.get("suggested_unit", orig_unit)
+                s_qty, s_unit = calc_quantity(ratio, s_unit)
+
                 substitutions.append(
                     SubstituteOption(
-                        name=item["name"],
-                        notes=item["notes"],
+                        name=clean_name,
+                        clean_name=clean_name,
+                        notes=item.get("notes", ""),
                         in_pantry=bool(found_pantry) or item.get("in_pantry", False),
                         pantry_item_id=found_pantry.id if found_pantry else None,
+                        suggested_quantity=s_qty,
+                        suggested_unit=s_unit,
+                        ratio=ratio,
+                        conversion_explanation=item.get("conversion_explanation"),
                     )
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Gemini substitution query failed: {e}")
 
     # If Gemini didn't return substitutions, use smart knowledge map
     if not substitutions:
@@ -476,32 +524,48 @@ async def substitute_ingredient(
                 break
 
         if matched_category:
-            for sub_name, sub_note in SUBSTITUTION_KNOWLEDGE[matched_category]:
+            for sub_name, clean_name, sub_note, ratio, target_unit, expl in SUBSTITUTION_KNOWLEDGE[matched_category]:
                 found_pantry = next(
-                    (p for p in available_items if p.ingredient.canonical_name.lower() in sub_name.lower()),
+                    (p for p in available_items if (p.ingredient and p.ingredient.canonical_name.lower() in clean_name.lower()) or (p.custom_ingredient_name and p.custom_ingredient_name.lower() in clean_name.lower())),
                     None
                 )
+                s_qty, s_unit = calc_quantity(ratio, target_unit)
                 substitutions.append(
                     SubstituteOption(
-                        name=sub_name,
+                        name=clean_name,
+                        clean_name=clean_name,
                         notes=sub_note,
                         in_pantry=bool(found_pantry),
                         pantry_item_id=found_pantry.id if found_pantry else None,
+                        suggested_quantity=s_qty,
+                        suggested_unit=s_unit,
+                        ratio=ratio,
+                        conversion_explanation=expl,
                     )
                 )
 
-        # Also add any items from pantry that might be related
+        # Also add any related items from pantry
         for p in available_items:
-            p_name = p.ingredient.canonical_name
-            if p_name.lower() != target_name.lower() and not any(s.name == p_name for s in substitutions):
+            p_name = p.ingredient.canonical_name if p.ingredient else (p.custom_ingredient_name or "")
+            clean_p = p_name
+            for brand in ("Maizena ", "Kikkoman ", "Shan’shi ", "Shan'shi ", "Go-Tan ", "OBAP ", "Clever ", "BILLA "):
+                clean_p = re.sub(re.escape(brand), "", clean_p, flags=re.IGNORECASE).strip()
+
+            if clean_p.lower() != target_name.lower() and not any(s.clean_name.lower() == clean_p.lower() for s in substitutions):
                 # If target is oil and pantry item is oil, etc.
-                if p.ingredient.category in ("sauce", "oil", "spice") and any(w in target_name.lower() for w in ("соус", "масло", "уксус")):
+                if (p.ingredient and p.ingredient.category in ("sauce", "oil", "spice")) and any(w in target_name.lower() for w in ("соус", "масло", "уксус")):
+                    s_qty, s_unit = calc_quantity(1.0, p.unit)
                     substitutions.append(
                         SubstituteOption(
-                            name=f"{p_name} ({p.quantity or ''} {p.unit})",
-                            notes="Доступно на вашей кухне в качестве соусной основы",
+                            name=clean_p,
+                            clean_name=clean_p,
+                            notes=f"Доступно на вашей кухне в качестве соусной основы ({p.quantity or ''} {p.unit})",
                             in_pantry=True,
                             pantry_item_id=p.id,
+                            suggested_quantity=s_qty,
+                            suggested_unit=s_unit,
+                            ratio=1.0,
+                            conversion_explanation="Использовать 1:1 по вкусу",
                         )
                     )
                     break
@@ -510,9 +574,14 @@ async def substitute_ingredient(
     if not substitutions:
         substitutions.append(
             SubstituteOption(
-                name="Исключить ингредиент или добавить по вкусу соль/перец",
+                name="Исключить ингредиент",
+                clean_name="Исключить ингредиент",
                 notes="Если продукт не является главным стержнем блюда, его можно пропустить без потери базовой структуры",
                 in_pantry=True,
+                suggested_quantity=0,
+                suggested_unit=orig_unit,
+                ratio=0,
+                conversion_explanation="Готовить без данного ингредиента",
             )
         )
 

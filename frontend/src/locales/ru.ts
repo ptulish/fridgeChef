@@ -68,9 +68,9 @@ export const ru = {
   recipes_version_history: 'История версий блюда',
   recipes_base_version: 'Базовая версия (оригинал)',
   recipes_adapted_version: 'Личная версия',
-  recipes_marinade_block: 'Ингредиенты маринада',
-  recipes_sauce_block: 'Ингредиенты основного соуса',
-  recipes_base_block: 'Основные ингредиенты',
+  recipes_marinade_block: '🥩 Маринад',
+  recipes_sauce_block: '🥣 Основной соус',
+  recipes_base_block: '🥗 Основные ингредиенты',
   recipes_instructions: 'Пошаговые инструкции',
 
   // Cooking
@@ -316,7 +316,7 @@ export const ru = {
   // Shopping Extended
   shopping_loading: 'Загрузка списка покупок...',
   shopping_item_name_label: 'Название продукта',
-  shopping_item_placeholder: 'Например, Соевый соус Kikkoman',
+  shopping_item_placeholder: 'Например, Соевый соус',
   shopping_one_click_desc: 'Вы можете добавить недостающие ингредиенты из любого рецепта в один клик.',
 
   // Extra keys for complete localization
@@ -436,6 +436,15 @@ export const ru = {
   substitute_not_in_stock: 'Нет в холодильнике',
   substitute_empty: 'В холодильнике не нашлось подходящей замены.',
   substitute_use_btn: 'Использовать замену',
+  substitute_apply_btn: 'Заменить в рецепте',
+  substitute_calculated_label: 'Рекомендуемая дозировка:',
+  substitute_ratio_label: 'Коэффициент пересчета:',
+  substitute_applied: 'Ингредиент «{oldName}» заменен на «{newName}» ({qty} {unit})',
+  substitute_no_options: 'Подходящих замен не найдено',
+  recipes_cart_single_added: '«{name}» добавлен в список покупок',
+  status_to_buy: 'В список покупок',
+  pantry_item_added_toast: 'Продукт «{name}» добавлен в холодильник',
+  pantry_catalog_popular_title: 'Популярные продукты (каталог)',
 
   // Quick Feedback Chips
   feedback_quick_title: 'Быстрые заметки о вкусе',

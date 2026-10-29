@@ -15,31 +15,53 @@ const API_BASE = import.meta.env.VITE_API_URL
   ? `${String(import.meta.env.VITE_API_URL).replace(/\/$/, '')}/api/v1`
   : '/api/v1';
 
-async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-    ...options,
-  });
+async function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-  if (!res.ok) {
-    let errorDetail = 'API request failed';
+async function request<T>(endpoint: string, options?: RequestInit, retries = 2): Promise<T> {
+  let attempt = 0;
+  while (true) {
     try {
-      const errJson = await res.json();
-      errorDetail = errJson.detail || errorDetail;
-    } catch {
-      errorDetail = await res.text();
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...options?.headers,
+        },
+        ...options,
+      });
+
+      if (!res.ok) {
+        if (attempt < retries && (res.status >= 502 && res.status <= 504)) {
+          attempt++;
+          await wait(attempt * 800);
+          continue;
+        }
+
+        let errorDetail = 'API request failed';
+        try {
+          const errJson = await res.json();
+          errorDetail = errJson.detail || errorDetail;
+        } catch {
+          errorDetail = await res.text();
+        }
+        throw new Error(errorDetail);
+      }
+
+      if (res.status === 204) {
+        return {} as T;
+      }
+
+      return res.json();
+    } catch (err: any) {
+      if (attempt < retries && (err.name === 'TypeError' || err.message?.includes('fetch') || err.message?.includes('Load failed'))) {
+        attempt++;
+        await wait(attempt * 800);
+        continue;
+      }
+      throw err;
     }
-    throw new Error(errorDetail);
   }
-
-  if (res.status === 204) {
-    return {} as T;
-  }
-
-  return res.json();
 }
 
 export const api = {
@@ -47,7 +69,23 @@ export const api = {
   getMe: () => request<{ id: string; name: string; email: string }>('/auth/me'),
 
   // Pantry
-  getPantry: () => request<PantryItem[]>('/pantry'),
+  getPantry: async () => {
+    try {
+      const data = await request<PantryItem[]>('/pantry');
+      try {
+        localStorage.setItem('fc_cached_pantry', JSON.stringify(data));
+      } catch {}
+      return data;
+    } catch (err) {
+      const cached = localStorage.getItem('fc_cached_pantry');
+      if (cached) {
+        try {
+          return JSON.parse(cached) as PantryItem[];
+        } catch {}
+      }
+      throw err;
+    }
+  },
   upsertPantryItem: (data: {
     ingredient_id?: string;
     custom_ingredient_name?: string;
@@ -75,7 +113,23 @@ export const api = {
     request<void>(`/pantry/${id}`, {
       method: 'DELETE',
     }),
-  getCanonicalIngredients: () => request<Ingredient[]>('/pantry/catalog/ingredients'),
+  getCanonicalIngredients: async () => {
+    try {
+      const data = await request<Ingredient[]>('/pantry/catalog/ingredients');
+      try {
+        localStorage.setItem('fc_cached_catalog', JSON.stringify(data));
+      } catch {}
+      return data;
+    } catch (err) {
+      const cached = localStorage.getItem('fc_cached_catalog');
+      if (cached) {
+        try {
+          return JSON.parse(cached) as Ingredient[];
+        } catch {}
+      }
+      throw err;
+    }
+  },
 
   // Recipes
   getRecipes: () => request<Recipe[]>('/recipes'),
@@ -224,8 +278,25 @@ export const api = {
     }),
 
   // Substitutions
-  substituteIngredient: (data: { ingredient_name: string; recipe_name?: string }) =>
-    request<{ substitutions: Array<{ name: string; notes: string; in_pantry: boolean; pantry_item_id?: string | null }> }>('/ai/substitute', {
+  substituteIngredient: (data: {
+    ingredient_name: string;
+    recipe_name?: string;
+    quantity?: number | null;
+    unit?: string | null;
+  }) =>
+    request<{
+      substitutions: Array<{
+        name: string;
+        clean_name: string;
+        notes: string;
+        in_pantry: boolean;
+        pantry_item_id?: string | null;
+        suggested_quantity?: number | null;
+        suggested_unit?: string | null;
+        ratio?: number | null;
+        conversion_explanation?: string | null;
+      }>;
+    }>('/ai/substitute', {
       method: 'POST',
       body: JSON.stringify(data),
     }),

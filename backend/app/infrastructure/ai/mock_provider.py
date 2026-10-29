@@ -29,11 +29,11 @@ class MockRecipeAIProvider:
             meat_prep = "нарезать тонкими полосками поперек волокон"
             title_meat = "говядиной"
         elif any(w in prompt_lower for w in ("свинин", "гуляш", "schwein", "pork")):
-            meat_name = "Свинина для гуляша (Schwein-Gulaschfleisch)"
+            meat_name = "Свинина (гуляш)"
             meat_prep = "нарезать тонкими брусочками поперек волокон"
             title_meat = "свининой"
         elif any(w in prompt_lower for w in ("куриц", "цыпл", "chicken", "huhn")):
-            meat_name = "Куриное филе / шницель"
+            meat_name = "Куриное филе"
             meat_prep = "нарезать удобными кусочками на один укус"
             title_meat = "курицей"
         else:
@@ -48,11 +48,11 @@ class MockRecipeAIProvider:
                 meat_prep = "нарезать тонкими полосками"
                 title_meat = "говядиной"
             elif any("свинин" in n for n in pantry_names):
-                meat_name = "Свинина для гуляша (Schwein-Gulaschfleisch)"
+                meat_name = "Свинина (гуляш)"
                 meat_prep = "нарезать тонкими брусочками"
                 title_meat = "свининой"
             else:
-                meat_name = "Куриное филе / шницель"
+                meat_name = "Куриное филе"
                 meat_prep = "нарезать удобными кусочками"
                 title_meat = "курицей"
 
@@ -70,7 +70,7 @@ class MockRecipeAIProvider:
             noodle_prep = "отварить до состояния al dente"
             title_carb = "спагетти"
         else:
-            noodle_name = "Рисовая лапша Bánh Phở 5 мм"
+            noodle_name = "Рисовая лапша"
             noodle_prep = "замочить в горячей воде или отварить 3 минуты"
             title_carb = "рисовой лапшой"
 
@@ -80,7 +80,7 @@ class MockRecipeAIProvider:
             sauce_desc = "густым соусом Терияки"
             sauce_items = [
                 {
-                    "name": "Go-Tan Wok Teriyaki",
+                    "name": "Соус Терияки",
                     "quantity": 2.0,
                     "unit": "tbsp",
                     "role": "main_sauce",
@@ -88,7 +88,7 @@ class MockRecipeAIProvider:
                     "scalable": True,
                 },
                 {
-                    "name": "Kikkoman соевый соус",
+                    "name": "Соевый соус",
                     "quantity": 1.0,
                     "unit": "tsp",
                     "role": "main_sauce",
@@ -96,7 +96,7 @@ class MockRecipeAIProvider:
                     "scalable": True,
                 },
                 {
-                    "name": "Мёд Clever",
+                    "name": "Мёд",
                     "quantity": 0.5,
                     "unit": "tsp",
                     "role": "main_sauce",
@@ -104,7 +104,7 @@ class MockRecipeAIProvider:
                     "scalable": True,
                 },
                 {
-                    "name": "Maizena кукурузный крахмал",
+                    "name": "Кукурузный крахмал",
                     "quantity": 1.0,
                     "unit": "tsp",
                     "role": "main_sauce",
@@ -118,7 +118,7 @@ class MockRecipeAIProvider:
             sauce_desc = "сладко-кислым соусом"
             sauce_items = [
                 {
-                    "name": "Shan’shi Sweet Chili",
+                    "name": "Сладкий чили соус",
                     "quantity": 1.5,
                     "unit": "tbsp",
                     "role": "main_sauce",
@@ -134,7 +134,7 @@ class MockRecipeAIProvider:
                     "scalable": True,
                 },
                 {
-                    "name": "Мёд Clever",
+                    "name": "Мёд",
                     "quantity": 1.0,
                     "unit": "tsp",
                     "role": "main_sauce",
@@ -142,7 +142,7 @@ class MockRecipeAIProvider:
                     "scalable": True,
                 },
                 {
-                    "name": "Kikkoman соевый соус",
+                    "name": "Соевый соус",
                     "quantity": 1.0,
                     "unit": "tsp",
                     "role": "main_sauce",
@@ -150,7 +150,7 @@ class MockRecipeAIProvider:
                     "scalable": True,
                 },
                 {
-                    "name": "Maizena кукурузный крахмал",
+                    "name": "Кукурузный крахмал",
                     "quantity": 1.5,
                     "unit": "tsp",
                     "role": "main_sauce",
@@ -164,7 +164,7 @@ class MockRecipeAIProvider:
             sauce_desc = "обильным чесночным соусом"
             sauce_items = [
                 {
-                    "name": "Shan’shi Wok Sauce",
+                    "name": "Вок соус",
                     "quantity": 2.0,
                     "unit": "tbsp",
                     "role": "main_sauce",
@@ -172,7 +172,7 @@ class MockRecipeAIProvider:
                     "scalable": True,
                 },
                 {
-                    "name": "Kikkoman соевый соус",
+                    "name": "Соевый соус",
                     "quantity": 1.0,
                     "unit": "tsp",
                     "role": "main_sauce",
@@ -188,7 +188,7 @@ class MockRecipeAIProvider:
                     "scalable": True,
                 },
                 {
-                    "name": "Мёд Clever",
+                    "name": "Мёд",
                     "quantity": 1.0,
                     "unit": "tsp",
                     "role": "main_sauce",
@@ -196,7 +196,7 @@ class MockRecipeAIProvider:
                     "scalable": True,
                 },
                 {
-                    "name": "Maizena кукурузный крахмал",
+                    "name": "Кукурузный крахмал",
                     "quantity": 1.5,
                     "unit": "tsp",
                     "role": "main_sauce",
@@ -205,6 +205,36 @@ class MockRecipeAIProvider:
                 },
             ]
             water_ml = 100
+
+        # Marinade items if requested
+        marinade_items = []
+        if marinate_meat:
+            marinade_items = [
+                {
+                    "name": "Соевый соус",
+                    "quantity": 1.0,
+                    "unit": "tsp",
+                    "role": "marinade",
+                    "preparation_note": "для маринования мяса",
+                    "scalable": True,
+                },
+                {
+                    "name": "Кукурузный крахмал",
+                    "quantity": 0.5,
+                    "unit": "tsp",
+                    "role": "marinade",
+                    "preparation_note": "сохраняет сочность мяса при жарке",
+                    "scalable": True,
+                },
+                {
+                    "name": "Растительное масло",
+                    "quantity": 0.5,
+                    "unit": "tsp",
+                    "role": "marinade",
+                    "preparation_note": "для маринада",
+                    "scalable": True,
+                },
+            ]
 
         title = f"Домашний вок с {title_meat} и {title_carb} {style_title}"
         description = (
@@ -254,14 +284,14 @@ class MockRecipeAIProvider:
                 "scalable": False,
             },
             {
-                "name": "Kikkoman кунжутное масло",
+                "name": "Кунжутное масло",
                 "quantity": 0.5,
                 "unit": "tsp",
                 "role": "garnish",
                 "preparation_note": "для финального аромата",
                 "scalable": False,
             },
-        ] + sauce_items
+        ] + marinade_items + sauce_items
 
         if must_use_ingredients:
             existing_names = [i["name"].lower() for i in all_ingredients]
@@ -353,7 +383,7 @@ class MockRecipeAIProvider:
         if any(w in prompt_lower for w in ("соль", "солен", "соли", "пересол", "пресн", "менее солен")):
             for ing in recipe.get("ingredients", []):
                 name = ing.get("name", "").lower()
-                if any(s in name for s in ("соев", "соль", "kikkoman", "соус")):
+                if any(s in name for s in ("соев", "соль", "соус")):
                     qty = ing.get("quantity")
                     if qty is not None:
                         ing["quantity"] = max(0.5, round(float(qty) * 0.5, 1))
@@ -380,7 +410,7 @@ class MockRecipeAIProvider:
                     found_sweet = True
             if not found_sweet:
                 recipe.get("ingredients", []).append({
-                    "name": "Мёд Clever",
+                    "name": "Мёд",
                     "quantity": 1.0,
                     "unit": "tsp",
                     "role": "main_sauce",

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../shared/api';
-import { PantryItem, Ingredient, InventoryTransaction } from '../../types';
+import { InventoryTransaction, PantryItem, Ingredient } from '../../types';
+import { POPULAR_CATALOG_INGREDIENTS, PopularCatalogItem } from '../../shared/popularIngredients';
 import { useI18n } from '../../app/I18nContext';
 import {
   AlertCircle,
@@ -68,6 +69,9 @@ export const PantryScreen: React.FC = () => {
   const [addFuzzyLevel, setAddFuzzyLevel] = useState<string>('full');
   const [addIsStaple, setAddIsStaple] = useState(false);
   const [addNotes, setAddNotes] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [autocompleteQuery, setAutocompleteQuery] = useState('');
 
   // Edit Single Item Modal (opened on clicking any card)
   const [editingItem, setEditingItem] = useState<PantryItem | null>(null);
@@ -292,14 +296,36 @@ export const PantryScreen: React.FC = () => {
     }
   };
 
+  const handleSelectPopularItem = (item: PopularCatalogItem) => {
+    const matched = catalog.find((c) => c.canonical_name.toLowerCase() === item.name.toLowerCase());
+    if (matched) {
+      setSelectedIngredientId(matched.id);
+      setAddMode('catalog');
+    } else {
+      setCustomName(item.name);
+      setCustomCategory(item.category);
+      setAddMode('custom');
+    }
+    setAutocompleteQuery(item.name);
+    setAddUnit(item.default_unit);
+    setAddStorageZone(item.storage_zone);
+    if (item.is_staple) setAddIsStaple(true);
+  };
+
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     try {
+      setIsSubmitting(true);
+      let addedName = '';
       if (addMode === 'catalog') {
         if (!selectedIngredientId) {
           alert(t('pantry_select_from_list_error'));
+          setIsSubmitting(false);
           return;
         }
+        const ing = catalog.find((c) => c.id === selectedIngredientId);
+        addedName = ing?.canonical_name || '';
         await api.upsertPantryItem({
           ingredient_id: selectedIngredientId,
           quantity: addQty ? parseFloat(addQty) : null,
@@ -312,33 +338,55 @@ export const PantryScreen: React.FC = () => {
           notes: addNotes || null,
         });
       } else {
-        const trimmed = customName.trim();
+        const trimmed = (customName || autocompleteQuery).trim();
         if (!trimmed) {
           alert(t('pantry_enter_custom_name_error'));
+          setIsSubmitting(false);
           return;
         }
-        await api.upsertPantryItem({
-          custom_ingredient_name: trimmed,
-          category: customCategory,
-          quantity: addQty ? parseFloat(addQty) : null,
-          unit: addUnit,
-          status: addStatus,
-          storage_zone: addStorageZone,
-          fuzzy_level: addFuzzyLevel,
-          is_staple: addIsStaple,
-          package_size: null,
-          notes: addNotes || null,
-        });
+        addedName = trimmed;
+        const matched = catalog.find((c) => c.canonical_name.toLowerCase() === trimmed.toLowerCase());
+        if (matched) {
+          await api.upsertPantryItem({
+            ingredient_id: matched.id,
+            quantity: addQty ? parseFloat(addQty) : null,
+            unit: addUnit,
+            status: addStatus,
+            storage_zone: addStorageZone,
+            fuzzy_level: addFuzzyLevel,
+            is_staple: addIsStaple,
+            package_size: null,
+            notes: addNotes || null,
+          });
+        } else {
+          await api.upsertPantryItem({
+            custom_ingredient_name: trimmed,
+            category: customCategory,
+            quantity: addQty ? parseFloat(addQty) : null,
+            unit: addUnit,
+            status: addStatus,
+            storage_zone: addStorageZone,
+            fuzzy_level: addFuzzyLevel,
+            is_staple: addIsStaple,
+            package_size: null,
+            notes: addNotes || null,
+          });
+        }
       }
       setShowAddModal(false);
       setAddQty('');
       setAddNotes('');
       setCustomName('');
+      setAutocompleteQuery('');
       setCatalogSearch('');
       setAddMode('catalog');
+      setToastMessage(t('pantry_item_added_toast', { name: addedName }));
+      setTimeout(() => setToastMessage(null), 3000);
       await loadData();
     } catch (err) {
       alert(t('common_error', { err: String(err) }));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -662,7 +710,12 @@ export const PantryScreen: React.FC = () => {
 
       {/* Edit Single Item Modal */}
       {editingItem && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setEditingItem(null);
+          }}
+        >
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
             <div className="flex items-start justify-between mb-4">
               <div>
@@ -892,7 +945,12 @@ export const PantryScreen: React.FC = () => {
 
       {/* Quick Confirm Modal */}
       {showConfirmModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowConfirmModal(false);
+          }}
+        >
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-slate-200">
             <div className="p-6 border-b border-slate-100">
               <h2 className="text-lg font-bold text-slate-800">
@@ -974,7 +1032,12 @@ export const PantryScreen: React.FC = () => {
 
       {/* Add Item Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowAddModal(false);
+          }}
+        >
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -1020,13 +1083,13 @@ export const PantryScreen: React.FC = () => {
 
             <form onSubmit={handleAddItem} className="space-y-4">
               {addMode === 'catalog' ? (
-                /* Mode 1: Select from list with search */
+                /* Mode 1: Select from list with search & autocomplete */
                 <div className="space-y-2">
                   <label className="block text-xs font-semibold text-slate-600 uppercase">
                     {t('pantry_catalog_select_label')}
                   </label>
                   
-                  {/* Search in catalog */}
+                  {/* Search in catalog with Autocomplete dropdown */}
                   <div className="relative">
                     <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
                     <input
@@ -1036,6 +1099,59 @@ export const PantryScreen: React.FC = () => {
                       onChange={(e) => setCatalogSearch(e.target.value)}
                       className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                     />
+
+                    {catalogSearch.trim() && (
+                      <div className="absolute left-0 right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-slate-200 z-50 max-h-52 overflow-y-auto divide-y divide-slate-100">
+                        {POPULAR_CATALOG_INGREDIENTS.filter((item) =>
+                          item.name.toLowerCase().includes(catalogSearch.toLowerCase().trim())
+                        ).slice(0, 8).map((item) => (
+                          <button
+                            key={item.name}
+                            type="button"
+                            onMouseDown={() => {
+                              handleSelectPopularItem(item);
+                              setCatalogSearch('');
+                            }}
+                            className="w-full px-3 py-2 text-left text-xs hover:bg-orange-50 flex items-center justify-between group transition"
+                          >
+                            <span className="font-semibold text-slate-800 group-hover:text-orange-700">
+                              {item.name}
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 group-hover:bg-orange-100 group-hover:text-orange-800">
+                              {getCategoryLabel(item.category)} • {item.default_unit}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Popular Ingredients Quick Picks Bar */}
+                  <div className="space-y-1 pt-1">
+                    <div className="text-[11px] font-semibold text-slate-500">
+                      {t('pantry_catalog_popular_title')}:
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1.5 bg-slate-50 rounded-xl border border-slate-100">
+                      {[
+                        'Куриное филе', 'Фарш домашний (говядина + свинина)', 'Свинина', 'Говядина',
+                        'Яйца куриные', 'Молоко', 'Сыр твердый', 'Масло сливочное',
+                        'Лук репчатый', 'Чеснок', 'Картофель', 'Морковь', 'Помидоры',
+                        'Соевый соус', 'Масло растительное', 'Рис', 'Макароны'
+                      ].map((popName) => {
+                        const popItem = POPULAR_CATALOG_INGREDIENTS.find((p) => p.name === popName);
+                        if (!popItem) return null;
+                        return (
+                          <button
+                            key={popName}
+                            type="button"
+                            onClick={() => handleSelectPopularItem(popItem)}
+                            className="px-2 py-1 rounded-lg text-xs font-medium bg-white text-slate-700 border border-slate-200 hover:border-orange-500 hover:text-orange-600 transition shadow-2xs"
+                          >
+                            {popName}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   {filteredCatalog.length > 0 ? (
@@ -1091,7 +1207,7 @@ export const PantryScreen: React.FC = () => {
               ) : (
                 /* Mode 2: Add custom product */
                 <div className="space-y-3 p-3 bg-orange-50/50 rounded-xl border border-orange-100">
-                  <div>
+                  <div className="relative">
                     <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
                       {t('pantry_custom_name_label')} <span className="text-red-500">*</span>
                     </label>
@@ -1103,6 +1219,30 @@ export const PantryScreen: React.FC = () => {
                       onChange={(e) => setCustomName(e.target.value)}
                       className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                     />
+
+                    {customName.trim() && (
+                      <div className="absolute left-0 right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-slate-200 z-50 max-h-48 overflow-y-auto divide-y divide-slate-100">
+                        {POPULAR_CATALOG_INGREDIENTS.filter((item) =>
+                          item.name.toLowerCase().includes(customName.toLowerCase().trim())
+                        ).slice(0, 6).map((item) => (
+                          <button
+                            key={item.name}
+                            type="button"
+                            onMouseDown={() => {
+                              handleSelectPopularItem(item);
+                            }}
+                            className="w-full px-3 py-2 text-left text-xs hover:bg-orange-50 flex items-center justify-between group transition"
+                          >
+                            <span className="font-semibold text-slate-800 group-hover:text-orange-700">
+                              {item.name}
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 group-hover:bg-orange-100 group-hover:text-orange-800">
+                              {getCategoryLabel(item.category)} • {item.default_unit}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -1272,9 +1412,17 @@ export const PantryScreen: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl text-sm font-semibold bg-orange-600 hover:bg-orange-700 text-white shadow-sm transition"
+                  disabled={isSubmitting}
+                  className="px-5 py-2 rounded-xl text-sm font-semibold bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-sm transition flex items-center gap-2"
                 >
-                  {t('common_add')}
+                  {isSubmitting ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      {t('common_saving')}
+                    </>
+                  ) : (
+                    t('common_add')
+                  )}
                 </button>
               </div>
             </form>
@@ -1284,7 +1432,12 @@ export const PantryScreen: React.FC = () => {
 
       {/* Stock Ledger History Modal */}
       {showLedgerModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowLedgerModal(false);
+          }}
+        >
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-slate-200">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
               <div>
@@ -1381,6 +1534,23 @@ export const PantryScreen: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 border border-slate-700">
+          <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+            <Check className="w-4 h-4" />
+          </div>
+          <span className="text-sm font-medium">{toastMessage}</span>
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            className="text-slate-400 hover:text-white p-1 ml-1"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
     </div>
