@@ -6,7 +6,8 @@ export const en = {
   nav_pantry: 'My Pantry',
   nav_recipes: 'Recipes',
   nav_cooking: 'Cooking History',
-  nav_profile: 'Taste Profile',
+  nav_profile: 'My Cabinet',
+  nav_cabinet: 'My Cabinet',
   nav_shopping: 'Shopping List',
   nav_ai: 'AI Chef',
   
@@ -452,4 +453,26 @@ export const en = {
   feedback_chip_more_sauce: 'Needs more sauce',
   feedback_chip_too_spicy: 'Too spicy',
   feedback_chip_will_repeat: 'Will cook again',
+
+  // Cabinet & Auth
+  cabinet_badge: 'Personal Cabinet',
+  cabinet_since: 'Member since {date}',
+  cabinet_stat_pantry: 'In Pantry',
+  cabinet_stat_cooked: 'Dishes Cooked',
+  cabinet_stat_shopping: 'Shopping Items',
+
+  auth_subtitle: 'Your personal culinary studio, private pantry, and smart recipes',
+  auth_tab_login: 'Log In',
+  auth_tab_register: 'Register',
+  auth_label_name: 'Your Name',
+  auth_placeholder_name: 'e.g. Anna or Denis',
+  auth_label_email: 'Email or Username',
+  auth_label_password: 'Password',
+  auth_btn_login: 'Enter Cabinet',
+  auth_btn_register: 'Create Cabinet',
+  auth_btn_logout: 'Log Out',
+  auth_btn_demo: 'Quick Demo Login (Chef)',
+  auth_or: 'or',
+  auth_fill_all_fields: 'Please fill in all required fields',
+  auth_password_too_short: 'Password must be at least 4 characters long',
 };

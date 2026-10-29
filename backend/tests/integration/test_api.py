@@ -29,11 +29,23 @@ async def test_pantry_listing():
         resp = await client.get("/api/v1/pantry")
         assert resp.status_code == 200
         items = resp.json()
-        assert len(items) > 0
-        # Check Apple cider vinegar is present
-        vinegar = next((i for i in items if "уксус" in i["ingredient"]["canonical_name"].lower()), None)
-        assert vinegar is not None
-        assert vinegar["status"] == "in_stock"
+        assert isinstance(items, list)
+
+        # Add an item to verify listing
+        add_resp = await client.post(
+            "/api/v1/pantry",
+            json={
+                "custom_ingredient_name": "Тестовый уксус",
+                "category": "sauce",
+                "quantity": 250,
+                "unit": "ml",
+                "status": "in_stock",
+            },
+        )
+        assert add_resp.status_code == 200
+        pantry_after = (await client.get("/api/v1/pantry")).json()
+        assert len(pantry_after) > 0
+        assert any("уксус" in i.get("custom_ingredient_name", "").lower() or (i.get("ingredient") and "уксус" in i["ingredient"]["canonical_name"].lower()) for i in pantry_after)
 
 
 @pytest.mark.asyncio
@@ -263,6 +275,19 @@ async def test_depletion_preview_complete_and_undo():
         recipe = recipes[0]
         version = recipe["versions"][0]
 
+        # Add matching item to pantry so depletion has an item to deduct
+        first_ing = version["ingredients"][0]["ingredient_name_snapshot"]
+        await client.post(
+            "/api/v1/pantry",
+            json={
+                "custom_ingredient_name": first_ing,
+                "category": "meat",
+                "quantity": 500,
+                "unit": "g",
+                "status": "in_stock",
+            },
+        )
+
         # 2. Start cooking session
         start_resp = await client.post(
             "/api/v1/cooking/sessions",
@@ -369,6 +394,109 @@ async def test_ai_substitute_ingredient():
             assert "name" in sub
             assert "notes" in sub
             assert "in_pantry" in sub
+
+
+@pytest.mark.asyncio
+async def test_auth_registration_login_and_me():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # 1. Register a new user
+        reg_resp = await client.post(
+            "/api/v1/auth/register",
+            json={
+                "name": "Алиса",
+                "email": "alisa@example.com",
+                "password": "securepassword123",
+            },
+        )
+        assert reg_resp.status_code == 201
+        reg_data = reg_resp.json()
+        assert "access_token" in reg_data
+        token = reg_data["access_token"]
+        user_id = reg_data["user"]["id"]
+        assert reg_data["user"]["name"] == "Алиса"
+
+        # 2. Get /auth/me with Bearer token
+        me_resp = await client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert me_resp.status_code == 200
+        me_data = me_resp.json()
+        assert me_data["id"] == user_id
+        assert me_data["name"] == "Алиса"
+
+        # 3. Login with credentials
+        login_resp = await client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "alisa@example.com",
+                "password": "securepassword123",
+            },
+        )
+        assert login_resp.status_code == 200
+        assert "access_token" in login_resp.json()
+
+        # 4. Failed login with wrong password
+        fail_resp = await client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "alisa@example.com",
+                "password": "wrongpassword",
+            },
+        )
+        assert fail_resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_auth_data_isolation_between_users():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Register User A (Борис)
+        res_a = await client.post(
+            "/api/v1/auth/register",
+            json={"name": "Борис", "email": "boris@test.com", "password": "pass1234"},
+        )
+        assert res_a.status_code == 201
+        token_a = res_a.json()["access_token"]
+
+        # Register User B (Виктор)
+        res_b = await client.post(
+            "/api/v1/auth/register",
+            json={"name": "Виктор", "email": "viktor@test.com", "password": "pass1234"},
+        )
+        assert res_b.status_code == 201
+        token_b = res_b.json()["access_token"]
+
+        # User A starts with empty pantry
+        pantry_a = (await client.get("/api/v1/pantry", headers={"Authorization": f"Bearer {token_a}"})).json()
+        assert len(pantry_a) == 0
+
+        # User B starts with empty pantry
+        pantry_b = (await client.get("/api/v1/pantry", headers={"Authorization": f"Bearer {token_b}"})).json()
+        assert len(pantry_b) == 0
+
+        # User A adds a product to his own fridge
+        add_a = await client.post(
+            "/api/v1/pantry",
+            headers={"Authorization": f"Bearer {token_a}"},
+            json={
+                "custom_ingredient_name": "Борисовы пельмени",
+                "category": "meat",
+                "quantity": 800,
+                "unit": "g",
+                "status": "in_stock",
+            },
+        )
+        assert add_a.status_code == 200
+
+        # User A sees his product
+        pantry_a_after = (await client.get("/api/v1/pantry", headers={"Authorization": f"Bearer {token_a}"})).json()
+        assert len(pantry_a_after) == 1
+        assert "пельмени" in pantry_a_after[0]["ingredient"]["canonical_name"].lower()
+
+        # User B's fridge remains completely empty!
+        pantry_b_after = (await client.get("/api/v1/pantry", headers={"Authorization": f"Bearer {token_b}"})).json()
+        assert len(pantry_b_after) == 0
+
 
 
 

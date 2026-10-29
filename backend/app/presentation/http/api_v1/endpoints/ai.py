@@ -2,7 +2,10 @@ from typing import Dict, Any, List, Optional
 from decimal import Decimal
 import json
 import re
+import logging
 from fastapi import APIRouter, Depends, HTTPException
+
+logger = logging.getLogger(__name__)
 from sqlalchemy import select
 from app.presentation.http.dependencies import (
     get_current_user,
@@ -393,10 +396,10 @@ async def substitute_ingredient(
     pantry_items = await pantry_repo.get_user_pantry(current_user.id)
     available_items = [
         p for p in pantry_items
-        if p.status != "out" and (p.ingredient or p.custom_ingredient_name)
+        if p.status != "out" and (p.ingredient or getattr(p, "custom_ingredient_name", None))
     ]
     pantry_names = [
-        (p.ingredient.canonical_name if p.ingredient else p.custom_ingredient_name)
+        (p.ingredient.canonical_name if p.ingredient else getattr(p, "custom_ingredient_name", ""))
         for p in available_items
     ]
 
@@ -492,7 +495,7 @@ async def substitute_ingredient(
                     clean_name = re.sub(re.escape(brand), "", clean_name, flags=re.IGNORECASE).strip()
 
                 found_pantry = next(
-                    (p for p in available_items if (p.ingredient and p.ingredient.canonical_name.lower() in clean_name.lower()) or (p.custom_ingredient_name and p.custom_ingredient_name.lower() in clean_name.lower())),
+                    (p for p in available_items if (p.ingredient and p.ingredient.canonical_name.lower() in clean_name.lower()) or (getattr(p, "custom_ingredient_name", None) and p.custom_ingredient_name.lower() in clean_name.lower())),
                     None
                 )
                 ratio = float(item.get("ratio", 1.0))
@@ -526,7 +529,7 @@ async def substitute_ingredient(
         if matched_category:
             for sub_name, clean_name, sub_note, ratio, target_unit, expl in SUBSTITUTION_KNOWLEDGE[matched_category]:
                 found_pantry = next(
-                    (p for p in available_items if (p.ingredient and p.ingredient.canonical_name.lower() in clean_name.lower()) or (p.custom_ingredient_name and p.custom_ingredient_name.lower() in clean_name.lower())),
+                    (p for p in available_items if (p.ingredient and p.ingredient.canonical_name.lower() in clean_name.lower()) or (getattr(p, "custom_ingredient_name", None) and p.custom_ingredient_name.lower() in clean_name.lower())),
                     None
                 )
                 s_qty, s_unit = calc_quantity(ratio, target_unit)
@@ -546,7 +549,7 @@ async def substitute_ingredient(
 
         # Also add any related items from pantry
         for p in available_items:
-            p_name = p.ingredient.canonical_name if p.ingredient else (p.custom_ingredient_name or "")
+            p_name = p.ingredient.canonical_name if p.ingredient else getattr(p, "custom_ingredient_name", "")
             clean_p = p_name
             for brand in ("Maizena ", "Kikkoman ", "Shan’shi ", "Shan'shi ", "Go-Tan ", "OBAP ", "Clever ", "BILLA "):
                 clean_p = re.sub(re.escape(brand), "", clean_p, flags=re.IGNORECASE).strip()

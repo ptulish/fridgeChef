@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useI18n } from './I18nContext';
+import { AuthProvider, useAuth } from './AuthContext';
+import { AuthScreen } from '../features/auth/AuthScreen';
 import { PantryScreen } from '../features/pantry/PantryScreen';
 import { RecipesScreen } from '../features/recipes/RecipesScreen';
 import { CookingHistoryScreen } from '../features/cooking/CookingHistoryScreen';
@@ -15,10 +17,12 @@ import {
   ShoppingCart,
   Sparkles,
   UtensilsCrossed,
+  LogOut,
 } from 'lucide-react';
 
-export const App: React.FC = () => {
+const AppContent: React.FC = () => {
   const { t, language, setLanguage } = useI18n();
+  const { user, loading, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<'pantry' | 'recipes' | 'cooking' | 'profile' | 'shopping' | 'ai'>('recipes');
 
   // Active cooking session
@@ -27,6 +31,23 @@ export const App: React.FC = () => {
     versionId: string;
     servings: number;
   } | null>(null);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-orange-600 flex items-center justify-center text-white animate-pulse">
+            <UtensilsCrossed className="w-6 h-6" />
+          </div>
+          <span className="text-xs font-bold text-slate-400">FridgeChef...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthScreen />;
+  }
 
   const navItems = [
     { id: 'recipes', label: t('nav_recipes'), icon: BookOpen },
@@ -85,8 +106,27 @@ export const App: React.FC = () => {
               })}
             </nav>
 
-            {/* Right Controls: Language Switcher */}
+            {/* Right Controls: User Cabinet Badge, Language Switcher, Logout */}
             <div className="flex items-center gap-2">
+              {/* User Cabinet Badge */}
+              <button
+                onClick={() => setActiveTab('profile')}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition ${
+                  activeTab === 'profile'
+                    ? 'bg-orange-600 text-white border-orange-600 shadow-sm'
+                    : 'bg-orange-50 hover:bg-orange-100/80 border-orange-200/80 text-orange-900'
+                }`}
+                title={t('nav_cabinet')}
+              >
+                <div className={`w-5 h-5 rounded-lg flex items-center justify-center text-[11px] font-black ${
+                  activeTab === 'profile' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white'
+                }`}>
+                  {user.name ? user.name[0].toUpperCase() : '👤'}
+                </div>
+                <span className="max-w-[90px] sm:max-w-[120px] truncate">{user.name}</span>
+              </button>
+
+              {/* Language Switcher */}
               <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
                 <button
                   onClick={() => setLanguage('ru')}
@@ -105,27 +145,37 @@ export const App: React.FC = () => {
                   EN
                 </button>
               </div>
+
+              {/* Logout button */}
+              <button
+                onClick={logout}
+                title={t('auth_btn_logout')}
+                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Main Screen Container */}
+      {/* Main Screen Container - isolated per user via key={user.id} */}
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 pb-28 md:pb-8">
         {activeTab === 'recipes' && (
           <RecipesScreen
+            key={user.id}
             onStartCooking={(rId, vId, s) =>
               setCookingSession({ recipeId: rId, versionId: vId, servings: s })
             }
             onNavigateToShopping={() => setActiveTab('shopping')}
           />
         )}
-        {activeTab === 'pantry' && <PantryScreen />}
-        {activeTab === 'cooking' && <CookingHistoryScreen />}
-        {activeTab === 'profile' && <TasteProfileScreen />}
-        {activeTab === 'shopping' && <ShoppingListScreen />}
+        {activeTab === 'pantry' && <PantryScreen key={user.id} />}
+        {activeTab === 'cooking' && <CookingHistoryScreen key={user.id} />}
+        {activeTab === 'profile' && <TasteProfileScreen key={user.id} />}
+        {activeTab === 'shopping' && <ShoppingListScreen key={user.id} />}
         {activeTab === 'ai' && (
-          <AIChefScreen onRecipeSaved={() => setActiveTab('recipes')} />
+          <AIChefScreen key={user.id} onRecipeSaved={() => setActiveTab('recipes')} />
         )}
       </main>
 
@@ -181,5 +231,13 @@ export const App: React.FC = () => {
         />
       )}
     </div>
+  );
+};
+
+export const App: React.FC = () => {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 };

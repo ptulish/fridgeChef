@@ -1,9 +1,6 @@
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict
-from typing import Optional
-from app.presentation.http.dependencies import get_current_user
-from app.infrastructure.db.models.user import UserModel
+from fastapi import APIRouter
 from app.presentation.http.api_v1.endpoints import (
+    auth,
     pantry,
     recipes,
     cooking,
@@ -15,20 +12,7 @@ from app.presentation.http.api_v1.endpoints import (
 
 api_router = APIRouter(prefix="/api/v1")
 
-
-class CurrentUserResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: str
-    name: str
-    email: Optional[str] = None
-
-
-@api_router.get("/auth/me", response_model=CurrentUserResponse, tags=["Auth"])
-async def get_me(current_user: UserModel = Depends(get_current_user)):
-    return current_user
-
-
+api_router.include_router(auth.router)
 api_router.include_router(pantry.router)
 api_router.include_router(recipes.router)
 api_router.include_router(cooking.router)

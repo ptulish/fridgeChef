@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../../shared/api';
 import { UserTasteProfile } from '../../types';
 import { useI18n } from '../../app/I18nContext';
+import { useAuth } from '../../app/AuthContext';
 import {
-  UserCheck,
   ShieldAlert,
   Sparkles,
   Utensils,
@@ -16,14 +16,20 @@ import {
   Ban,
   Plus,
   X,
-  Award
+  Award,
+  LogOut,
+  Refrigerator,
+  History,
+  ShoppingCart,
 } from 'lucide-react';
 
 export const TasteProfileScreen: React.FC = () => {
   const { t } = useI18n();
+  const { user, logout } = useAuth();
   const [profile, setProfile] = useState<UserTasteProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [stats, setStats] = useState({ pantryCount: 0, sessionsCount: 0, shoppingCount: 0 });
 
   // Edit form state
   const [saltSens, setSaltSens] = useState('high');
@@ -61,8 +67,24 @@ export const TasteProfileScreen: React.FC = () => {
     }
   };
 
+  const loadStats = async () => {
+    try {
+      const [pantry, sessions, shopping] = await Promise.allSettled([
+        api.getPantry(),
+        api.getSessions(),
+        api.getShoppingList(),
+      ]);
+      setStats({
+        pantryCount: pantry.status === 'fulfilled' ? pantry.value.length : 0,
+        sessionsCount: sessions.status === 'fulfilled' ? sessions.value.length : 0,
+        shoppingCount: shopping.status === 'fulfilled' ? (shopping.value.items?.length || 0) : 0,
+      });
+    } catch {}
+  };
+
   useEffect(() => {
     loadProfile();
+    loadStats();
   }, []);
 
   const handleAddAllergy = () => {
@@ -111,22 +133,77 @@ export const TasteProfileScreen: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <UserCheck className="w-5 h-5 text-orange-600" />
-            <h1 className="text-2xl font-bold text-slate-800">{t('profile_title')}</h1>
+      {/* User Account & Cabinet Header Card */}
+      <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-6 sm:p-8 rounded-3xl shadow-lg border border-slate-700/50 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
+        
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 flex items-center justify-center text-white text-2xl font-black shadow-md shadow-orange-500/30">
+              {user?.name ? user.name[0].toUpperCase() : '👤'}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-black tracking-tight">{user?.name || t('nav_cabinet')}</h1>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider bg-orange-500/20 text-orange-400 border border-orange-500/30 px-2 py-0.5 rounded-full">
+                  {t('cabinet_badge')}
+                </span>
+              </div>
+              <p className="text-slate-400 text-xs mt-1 font-medium flex items-center gap-2">
+                <span>{user?.email || 'chef@fridgechef.local'}</span>
+                {user?.created_at && (
+                  <>
+                    <span>•</span>
+                    <span>{t('cabinet_since', { date: new Date(user.created_at).toLocaleDateString() })}</span>
+                  </>
+                )}
+              </p>
+            </div>
           </div>
-          <p className="text-sm text-slate-500">{t('profile_desc')}</p>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsEditing(!isEditing)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition border border-white/10 backdrop-blur-sm"
+            >
+              <Edit3 className="w-4 h-4 text-orange-400" />
+              {isEditing ? t('profile_close_edit') : t('profile_edit')}
+            </button>
+            <button
+              onClick={logout}
+              className="flex items-center gap-2 px-4 py-2.5 bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 hover:text-rose-200 rounded-xl text-xs font-bold transition border border-rose-500/30"
+              title={t('auth_btn_logout')}
+            >
+              <LogOut className="w-4 h-4 text-rose-400" />
+              <span className="hidden sm:inline">{t('auth_btn_logout')}</span>
+            </button>
+          </div>
         </div>
-        <button
-          onClick={() => setIsEditing(!isEditing)}
-          className="flex items-center gap-2 px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-semibold transition"
-        >
-          <Edit3 className="w-4 h-4" />
-          {isEditing ? t('profile_close_edit') : t('profile_edit')}
-        </button>
+
+        {/* Stats Row */}
+        <div className="grid grid-cols-3 gap-3 mt-6 pt-6 border-t border-slate-700/60 relative z-10">
+          <div className="bg-slate-800/60 rounded-2xl p-3 border border-slate-700/40 text-center">
+            <div className="flex items-center justify-center gap-1.5 text-orange-400 text-xs font-bold mb-1">
+              <Refrigerator className="w-3.5 h-3.5" />
+              <span>{t('cabinet_stat_pantry')}</span>
+            </div>
+            <div className="text-xl font-black text-white">{stats.pantryCount}</div>
+          </div>
+          <div className="bg-slate-800/60 rounded-2xl p-3 border border-slate-700/40 text-center">
+            <div className="flex items-center justify-center gap-1.5 text-amber-400 text-xs font-bold mb-1">
+              <History className="w-3.5 h-3.5" />
+              <span>{t('cabinet_stat_cooked')}</span>
+            </div>
+            <div className="text-xl font-black text-white">{stats.sessionsCount}</div>
+          </div>
+          <div className="bg-slate-800/60 rounded-2xl p-3 border border-slate-700/40 text-center">
+            <div className="flex items-center justify-center gap-1.5 text-emerald-400 text-xs font-bold mb-1">
+              <ShoppingCart className="w-3.5 h-3.5" />
+              <span>{t('cabinet_stat_shopping')}</span>
+            </div>
+            <div className="text-xl font-black text-white">{stats.shoppingCount}</div>
+          </div>
+        </div>
       </div>
 
       {/* Editing Form */}

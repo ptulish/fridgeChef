@@ -17,11 +17,18 @@ from app.infrastructure.db.models import (
     RecipeStepModel,
 )
 from app.domain.services.taste_profile_updater import TasteProfileUpdaterService
+from app.core.auth import hash_password
+from sqlalchemy import text
 
 
 async def init_models():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Ensure password_hash column exists
+        try:
+            await conn.execute(text("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255);"))
+        except Exception:
+            pass
 
 
 async def seed_data():
@@ -41,6 +48,7 @@ async def seed_data():
             email="chef@fridgechef.local",
             name="Chef",
             auth_subject="local_dev_chef",
+            password_hash=hash_password("chef123"),
         )
         session.add(user)
         await session.flush()
@@ -130,48 +138,8 @@ async def seed_data():
 
         await session.flush()
 
-        # 4. User Pantry Initial Import
-        now_dt = datetime(2026, 10, 22, 20, 0, 0, tzinfo=timezone.utc)
-
-        pantry_seed = [
-            ("Яблочный уксус", None, "ml", "in_stock", now_dt, "Подтверждено пользователем"),
-            ("Соевый соус", None, "ml", "needs_confirmation", None, "Проверить остаток"),
-            ("Вок соус", None, "ml", "needs_confirmation", None, "Соус для обжарки"),
-            ("Соус Терияки", None, "ml", "needs_confirmation", None, "Сладковатый соус"),
-            ("Кисло-сладкий соус", None, "ml", "needs_confirmation", None, "Для вока"),
-            ("Сладкий чили соус", None, "ml", "needs_confirmation", None, "Для подачи"),
-            ("Кунжутное масло", None, "ml", "needs_confirmation", None, "Ароматное масло"),
-            ("Мёд", None, "ml", "needs_confirmation", None, "Натуральный мёд"),
-            ("Кукурузный крахмал", None, "g", "needs_confirmation", None, "Для соусов"),
-            ("Приправа для вока", None, "g", "needs_confirmation", None, "Пряная смесь"),
-            ("Кайенский перец", None, "g", "needs_confirmation", None, "Острая специя"),
-            ("Рисовая лапша", None, "g", "needs_confirmation", None, "Для вока и супов"),
-            ("Панировочные сухари", None, "g", "needs_confirmation", None, "Для панировки"),
-            ("Чеснок", None, "clove", "needs_confirmation", None, "Свежий чеснок"),
-            ("Лук репчатый", None, "pcs", "needs_confirmation", None, "Базовый овощ"),
-            ("Соль", None, "g", "needs_confirmation", None, "Базовая специя"),
-            ("Чёрный перец", None, "g", "needs_confirmation", None, "Базовая специя"),
-            ("Растительное масло", None, "ml", "needs_confirmation", None, "Масло для жарки"),
-            ("Куриное филе", None, "g", "needs_confirmation", None, "Остаток уточнить"),
-            ("Свинина (гуляш)", None, "g", "needs_confirmation", None, "Остаток уточнить"),
-            ("Сухая удон-лапша", None, "g", "needs_confirmation", None, "Пшеничная лапша"),
-            ("Спагетти", None, "g", "needs_confirmation", None, "Паста"),
-        ]
-
-        for ing_name, qty, unit, status, confirmed_at, note in pantry_seed:
-            ing_obj = ingredient_map.get(ing_name)
-            if ing_obj:
-                p_item = PantryItemModel(
-                    user_id=user.id,
-                    ingredient_id=ing_obj.id,
-                    quantity=qty,
-                    unit=unit,
-                    status=status,
-                    last_confirmed_at=confirmed_at,
-                    source="historical_context",
-                    notes=note,
-                )
-                session.add(p_item)
+        # 4. User Pantry: Starts clean and empty as requested
+        # Pantry items are added manually by users or via shopping/receipt flows.
 
         # 5. Seed Baseline Recipes
         # Recipe 1: Chinese Chicken Wok with Rice Noodles (C3)

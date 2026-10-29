@@ -209,3 +209,17 @@ export interface ShoppingList {
   created_at: string;
   items: ShoppingListItem[];
 }
+
+export interface User {
+  id: string;
+  name: string;
+  email?: string | null;
+  created_at?: string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+  user: User;
+}
+

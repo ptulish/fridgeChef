@@ -10,7 +10,26 @@ import {
   ShoppingList,
   ShoppingListItem,
   InventoryTransaction,
+  User,
+  AuthResponse,
 } from '../types';
+
+let authToken: string | null = localStorage.getItem('fc_token');
+
+export function setAuthToken(token: string | null) {
+  authToken = token;
+  if (token) {
+    localStorage.setItem('fc_token', token);
+  } else {
+    localStorage.removeItem('fc_token');
+    localStorage.removeItem('fc_cached_pantry');
+  }
+}
+
+export function getAuthToken(): string | null {
+  return authToken;
+}
+
 const API_BASE = import.meta.env.VITE_API_URL
   ? `${String(import.meta.env.VITE_API_URL).replace(/\/$/, '')}/api/v1`
   : '/api/v1';
@@ -23,12 +42,15 @@ async function request<T>(endpoint: string, options?: RequestInit, retries = 2):
   let attempt = 0;
   while (true) {
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        ...((options?.headers as Record<string, string>) || {}),
+      };
+
       const res = await fetch(`${API_BASE}${endpoint}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...options?.headers,
-        },
         ...options,
+        headers,
       });
 
       if (!res.ok) {
@@ -66,7 +88,22 @@ async function request<T>(endpoint: string, options?: RequestInit, retries = 2):
 
 export const api = {
   // Auth
-  getMe: () => request<{ id: string; name: string; email: string }>('/auth/me'),
+  login: (data: { email: string; password: string }) =>
+    request<AuthResponse>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  register: (data: { name: string; email: string; password: string }) =>
+    request<AuthResponse>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  demoLogin: () =>
+    request<AuthResponse>('/auth/demo-login', {
+      method: 'POST',
+    }),
+  getMe: () => request<User>('/auth/me'),
+  getUsers: () => request<User[]>('/auth/users'),
 
   // Pantry
   getPantry: async () => {

@@ -45,10 +45,14 @@ async def upsert_pantry_item(
         if not name_clean:
             raise HTTPException(status_code=400, detail="Ingredient name cannot be empty")
 
-        # Check if already exists in IngredientModel (case-insensitive)
-        stmt = select(IngredientModel).where(func.lower(IngredientModel.canonical_name) == name_clean.lower())
+        # Check if already exists in IngredientModel (case-insensitive for both SQLite and Postgres)
+        stmt = select(IngredientModel)
         res = await session.execute(stmt)
-        existing_ing = res.scalars().first()
+        all_ings = res.scalars().all()
+        existing_ing = next(
+            (i for i in all_ings if i.canonical_name.strip().lower() == name_clean.lower()),
+            None
+        )
         if existing_ing:
             ingredient_id = existing_ing.id
         else:

@@ -6,7 +6,8 @@ export const ru = {
   nav_pantry: 'Мой холодильник',
   nav_recipes: 'Рецепты',
   nav_cooking: 'История готовки',
-  nav_profile: 'Карточка вкусов',
+  nav_profile: 'Мой кабинет',
+  nav_cabinet: 'Мой кабинет',
   nav_shopping: 'Список покупок',
   nav_ai: 'AI-Шеф',
   
@@ -452,4 +453,26 @@ export const ru = {
   feedback_chip_more_sauce: 'Больше соуса',
   feedback_chip_too_spicy: 'Слишком остро',
   feedback_chip_will_repeat: 'Буду готовить снова',
+
+  // Cabinet & Auth
+  cabinet_badge: 'Личный кабинет',
+  cabinet_since: 'В клубе с {date}',
+  cabinet_stat_pantry: 'В холодильнике',
+  cabinet_stat_cooked: 'Приготовлено блюд',
+  cabinet_stat_shopping: 'В списке покупок',
+
+  auth_subtitle: 'Личный кабинет повара, персональный холодильник и умные рецепты',
+  auth_tab_login: 'Вход',
+  auth_tab_register: 'Регистрация',
+  auth_label_name: 'Ваше имя',
+  auth_placeholder_name: 'Например: Анна или Денис',
+  auth_label_email: 'Email или логин',
+  auth_label_password: 'Пароль',
+  auth_btn_login: 'Войти в кабинет',
+  auth_btn_register: 'Создать кабинет',
+  auth_btn_logout: 'Выйти',
+  auth_btn_demo: 'Быстрый вход как Шеф (демо)',
+  auth_or: 'или',
+  auth_fill_all_fields: 'Пожалуйста, заполните все обязательные поля',
+  auth_password_too_short: 'Пароль должен содержать не менее 4 символов',
 };
