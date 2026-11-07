@@ -280,6 +280,7 @@ export const api = {
           marinate_meat?: boolean;
           marinate_duration_minutes?: number | null;
           must_use_ingredients?: string[];
+          equipment?: string[];
         }
   ) => {
     const body = typeof params === 'string' ? { prompt: params } : (params || {});

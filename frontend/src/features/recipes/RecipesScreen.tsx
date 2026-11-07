@@ -297,9 +297,9 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onStartCooking, on
       {/* PHASE 4: 3 AI RECOMMENDATION RIBBONS */}
       {ribbons.length > 0 && (
         <div className="bg-gradient-to-br from-slate-900 to-slate-950 p-5 sm:p-6 rounded-3xl text-white shadow-xl space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-orange-600 flex items-center justify-center text-white shadow-md shadow-orange-500/30">
+              <div className="w-8 h-8 rounded-xl bg-orange-600 flex items-center justify-center text-white shadow-md shadow-orange-500/30 shrink-0">
                 <Sparkles className="w-4 h-4" />
               </div>
               <div>
@@ -313,23 +313,23 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onStartCooking, on
             </div>
 
             {/* Ribbon Segmented Switcher */}
-            <div className="flex gap-1.5 p-1 bg-slate-800/80 rounded-2xl border border-slate-700/60 overflow-x-auto max-w-full">
+            <div className="flex flex-wrap gap-1.5 p-1 bg-slate-800/90 rounded-2xl border border-slate-700/60">
               {ribbons.map((rib) => {
                 const isActive = rib.id === activeRibbonId;
                 const icon =
                   rib.id === 'cook_now' ? (
-                    <Flame className="w-3.5 h-3.5 text-amber-400" />
+                    <Flame className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                   ) : rib.id === 'finish_low' ? (
-                    <Target className="w-3.5 h-3.5 text-orange-400" />
+                    <Target className="w-3.5 h-3.5 text-orange-400 shrink-0" />
                   ) : (
-                    <ShoppingBag className="w-3.5 h-3.5 text-blue-400" />
+                    <ShoppingBag className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                   );
 
                 return (
                   <button
                     key={rib.id}
                     onClick={() => setActiveRibbonId(rib.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition ${
                       isActive
                         ? 'bg-orange-600 text-white shadow-sm'
                         : 'text-slate-300 hover:text-white hover:bg-slate-700/60'

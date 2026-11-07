@@ -10,7 +10,6 @@ import {
   Flame,
   Droplets,
   Edit3,
-  Check,
   HeartPulse,
   Scale,
   Ban,
@@ -23,13 +22,41 @@ import {
   ShoppingCart,
 } from 'lucide-react';
 
-export const TasteProfileScreen: React.FC = () => {
+interface TasteProfileScreenProps {
+  onRetakeSurvey?: () => void;
+}
+
+export const TasteProfileScreen: React.FC<TasteProfileScreenProps> = ({ onRetakeSurvey }) => {
   const { t } = useI18n();
   const { user, logout } = useAuth();
   const [profile, setProfile] = useState<UserTasteProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [stats, setStats] = useState({ pantryCount: 0, sessionsCount: 0, shoppingCount: 0 });
+
+  const standardEquipment = [
+    'Плита и стандартный набор (кастрюля, сковорода)',
+    'Духовка',
+    'Микроволновка',
+    'Блендер / кухонный комбайн',
+    'Мультиварка или скороварка',
+    'Аэрогриль (Air Fryer)',
+    'Вок (Wok) или гриль-сковорода',
+  ];
+
+  const handleToggleEquipment = async (item: string) => {
+    if (!profile) return;
+    const current = profile.equipment || [];
+    const updated = current.includes(item)
+      ? current.filter((i) => i !== item)
+      : [...current, item];
+    try {
+      const res = await api.updateTasteProfile({ equipment: updated });
+      setProfile(res);
+    } catch (err) {
+      console.error('Failed to update equipment:', err);
+    }
+  };
 
   // Edit form state
   const [saltSens, setSaltSens] = useState('high');
@@ -161,17 +188,27 @@ export const TasteProfileScreen: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {onRetakeSurvey && (
+              <button
+                type="button"
+                onClick={onRetakeSurvey}
+                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-xl text-xs font-bold transition shadow-sm"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>{t('onboarding_retake_btn')}</span>
+              </button>
+            )}
             <button
               onClick={() => setIsEditing(!isEditing)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition border border-white/10 backdrop-blur-sm"
+              className="flex items-center gap-2 px-3.5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition border border-white/10 backdrop-blur-sm"
             >
               <Edit3 className="w-4 h-4 text-orange-400" />
               {isEditing ? t('profile_close_edit') : t('profile_edit')}
             </button>
             <button
               onClick={logout}
-              className="flex items-center gap-2 px-4 py-2.5 bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 hover:text-rose-200 rounded-xl text-xs font-bold transition border border-rose-500/30"
+              className="flex items-center gap-2 px-3.5 py-2.5 bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 hover:text-rose-200 rounded-xl text-xs font-bold transition border border-rose-500/30"
               title={t('auth_btn_logout')}
             >
               <LogOut className="w-4 h-4 text-rose-400" />
@@ -534,40 +571,101 @@ export const TasteProfileScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* Equipment and Habits */}
+      {/* Equipment and Lifestyle & Diet */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Interactive Kitchen Equipment */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-          <div className="flex items-center gap-2 text-slate-700">
-            <Utensils className="w-5 h-5 text-orange-500" />
-            <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wide">
-              {t('profile_equipment')}
-            </h3>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-slate-700">
+              <Utensils className="w-5 h-5 text-orange-500" />
+              <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wide">
+                {t('profile_equipment')}
+              </h3>
+            </div>
+            <span className="text-[11px] text-slate-400">Нажмите для переключения</span>
           </div>
+
           <div className="flex flex-wrap gap-2">
-            {profile.equipment.map((eq, idx) => (
-              <span
-                key={idx}
-                className="px-3 py-1.5 bg-orange-50 border border-orange-200 text-orange-800 font-semibold rounded-xl text-xs flex items-center gap-1.5"
-              >
-                <Check className="w-3.5 h-3.5 text-orange-600" />
-                {eq}
-              </span>
-            ))}
+            {standardEquipment.map((eq, idx) => {
+              const isSelected = profile.equipment.includes(eq);
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleToggleEquipment(eq)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition border ${
+                    isSelected
+                      ? 'bg-orange-50 border-orange-300 text-orange-900 shadow-xs'
+                      : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                  }`}
+                  title={isSelected ? 'В наличии (нажмите, чтобы убрать)' : 'Нажмите, чтобы добавить в доступные'}
+                >
+                  <div
+                    className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[10px] ${
+                      isSelected ? 'bg-orange-600 text-white' : 'border border-slate-300 bg-white'
+                    }`}
+                  >
+                    {isSelected ? '✓' : '+'}
+                  </div>
+                  <span>{eq}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
+        {/* Real Diet, Goals & Preferences Card (Replaces obsolete hardcoded meat card) */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-          <div className="flex items-center gap-2 text-slate-700">
-            <Sparkles className="w-5 h-5 text-indigo-500" />
-            <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wide">
-              {t('profile_meats')}
-            </h3>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-slate-700">
+              <Sparkles className="w-5 h-5 text-indigo-500" />
+              <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wide">
+                Диета, цели и вкусы
+              </h3>
+            </div>
+            {onRetakeSurvey && (
+              <button
+                type="button"
+                onClick={onRetakeSurvey}
+                className="text-[11px] font-bold text-orange-600 hover:text-orange-700 transition"
+              >
+                Изменить в опросе →
+              </button>
+            )}
           </div>
-          <div className="text-xs text-slate-600 space-y-1">
-            <p>{t('profile_meat_beef_pork')}</p>
-            <p>{t('profile_meat_chicken')}</p>
-            <p>{t('profile_meat_sausages')}</p>
-            <p>{t('profile_meat_portion_desc')}</p>
+          <div className="text-xs text-slate-600 space-y-2">
+            <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
+              <span className="font-semibold text-slate-500">Тип питания:</span>
+              <span className="font-bold text-slate-800 capitalize">
+                {profile.habits?.diet_type || (profile.diet_modes && profile.diet_modes[0]) || 'Ем всё'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
+              <span className="font-semibold text-slate-500">Время готовки:</span>
+              <span className="font-bold text-slate-800">
+                {profile.habits?.cooking_time_pref || '30–45 минут'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
+              <span className="font-semibold text-slate-500">Острота:</span>
+              <span className="font-bold text-slate-800">
+                {profile.habits?.spice_tolerance || 'Легкая пикантность'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
+              <span className="font-semibold text-slate-500">Главная цель:</span>
+              <span className="font-bold text-slate-800">
+                {profile.habits?.nutritional_goal || 'Вкусно и сбалансированно'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
+              <span className="font-semibold text-slate-500">Любимые кухни:</span>
+              <span className="font-bold text-slate-800">
+                {profile.favorite_cuisines && profile.favorite_cuisines.length > 0
+                  ? profile.favorite_cuisines.join(', ')
+                  : 'Домашняя классика, средиземноморская'}
+              </span>
+            </div>
           </div>
         </div>
       </div>

@@ -51,6 +51,7 @@ export const AIChefScreen: React.FC<AIChefScreenProps> = ({ onRecipeSaved }) => 
   const [marinateDuration, setMarinateDuration] = useState<number>(30);
   const [mustUseIngredients, setMustUseIngredients] = useState<string[]>([]);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
+  const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
 
   // Refine & History State
   const [refinementPrompt, setRefinementPrompt] = useState('');
@@ -88,7 +89,19 @@ export const AIChefScreen: React.FC<AIChefScreenProps> = ({ onRecipeSaved }) => 
   useEffect(() => {
     loadAIStatus();
     loadPantry();
+    loadProfileEquipment();
   }, []);
+
+  const loadProfileEquipment = async () => {
+    try {
+      const prof = await api.getTasteProfile();
+      if (prof.equipment && prof.equipment.length > 0) {
+        setSelectedEquipment(prof.equipment);
+      }
+    } catch (err) {
+      console.warn('Could not load taste profile equipment:', err);
+    }
+  };
 
   const loadAIStatus = async () => {
     try {
@@ -158,6 +171,7 @@ export const AIChefScreen: React.FC<AIChefScreenProps> = ({ onRecipeSaved }) => 
         marinate_meat: marinateMeat,
         marinate_duration_minutes: marinateMeat ? marinateDuration : null,
         must_use_ingredients: mustUseIngredients.length > 0 ? mustUseIngredients : undefined,
+        equipment: selectedEquipment.length > 0 ? selectedEquipment : undefined,
       });
       setGeneratedRecipe(recipe);
     } catch (err: any) {
@@ -395,6 +409,69 @@ export const AIChefScreen: React.FC<AIChefScreenProps> = ({ onRecipeSaved }) => 
             >
               {t('ai_satiety_hearty')}
             </button>
+          </div>
+        </div>
+
+        {/* Kitchen Equipment Filter for AI Recipe */}
+        <div className="pt-2 border-t border-slate-100 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Utensils className="w-4 h-4 text-orange-600" />
+              <span className="text-xs font-semibold text-slate-700">Техника для приготовления:</span>
+            </div>
+            <span className="text-[10px] text-slate-400">ИИ адаптирует рецепт под выбранную технику</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              { id: 'stove', label: 'Плита и сковорода' },
+              { id: 'oven', label: 'Духовка' },
+              { id: 'airfryer', label: 'Аэрогриль' },
+              { id: 'microwave', label: 'Микроволновка' },
+              { id: 'wok', label: 'Вок / Гриль' },
+              { id: 'multicooker', label: 'Мультиварка' },
+              { id: 'blender', label: 'Блендер' },
+            ].map((item) => {
+              const isSelected = selectedEquipment.some((eq) =>
+                eq.toLowerCase().includes(item.label.toLowerCase().split(' ')[0])
+              );
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    const fullMatch = [
+                      'Плита и стандартный набор (кастрюля, сковорода)',
+                      'Духовка',
+                      'Аэрогриль (Air Fryer)',
+                      'Микроволновка',
+                      'Вок (Wok) или гриль-сковорода',
+                      'Мультиварка или скороварка',
+                      'Блендер / кухонный комбайн',
+                    ].find((f) => f.toLowerCase().includes(item.label.toLowerCase().split(' ')[0])) || item.label;
+
+                    setSelectedEquipment((prev) =>
+                      prev.includes(fullMatch)
+                        ? prev.filter((e) => e !== fullMatch)
+                        : [...prev, fullMatch]
+                    );
+                  }}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition border flex items-center gap-1.5 ${
+                    isSelected
+                      ? 'bg-orange-50 border-orange-300 text-orange-950 font-bold shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                  }`}
+                >
+                  <span
+                    className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[9px] ${
+                      isSelected ? 'bg-orange-600 text-white' : 'border border-slate-300 bg-white'
+                    }`}
+                  >
+                    {isSelected ? '✓' : '+'}
+                  </span>
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 

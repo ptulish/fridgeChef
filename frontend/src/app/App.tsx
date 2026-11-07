@@ -9,6 +9,8 @@ import { TasteProfileScreen } from '../features/profile/TasteProfileScreen';
 import { ShoppingListScreen } from '../features/shopping/ShoppingListScreen';
 import { AIChefScreen } from '../features/ai-chef/AIChefScreen';
 import { CookingModal } from '../features/cooking/CookingModal';
+import { OnboardingWizard } from '../features/profile/OnboardingWizard';
+import { api } from '../shared/api';
 import {
   Refrigerator,
   BookOpen,
@@ -31,6 +33,24 @@ const AppContent: React.FC = () => {
     versionId: string;
     servings: number;
   } | null>(null);
+
+  // Onboarding survey modal state
+  const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
+
+  React.useEffect(() => {
+    if (!user) return;
+    const checkOnboarding = async () => {
+      try {
+        const p = await api.getTasteProfile();
+        if (!p.habits?.onboarding_completed) {
+          setShowOnboarding(true);
+        }
+      } catch (err) {
+        console.warn('Could not check onboarding status:', err);
+      }
+    };
+    checkOnboarding();
+  }, [user?.id]);
 
   if (loading) {
     return (
@@ -172,7 +192,9 @@ const AppContent: React.FC = () => {
         )}
         {activeTab === 'pantry' && <PantryScreen key={user.id} />}
         {activeTab === 'cooking' && <CookingHistoryScreen key={user.id} />}
-        {activeTab === 'profile' && <TasteProfileScreen key={user.id} />}
+        {activeTab === 'profile' && (
+          <TasteProfileScreen key={user.id} onRetakeSurvey={() => setShowOnboarding(true)} />
+        )}
         {activeTab === 'shopping' && <ShoppingListScreen key={user.id} />}
         {activeTab === 'ai' && (
           <AIChefScreen key={user.id} onRecipeSaved={() => setActiveTab('recipes')} />
@@ -216,6 +238,18 @@ const AppContent: React.FC = () => {
           );
         })}
       </nav>
+
+      {/* Onboarding Wizard Modal */}
+      {showOnboarding && (
+        <OnboardingWizard
+          onComplete={() => {
+            setShowOnboarding(false);
+          }}
+          onSkip={() => {
+            setShowOnboarding(false);
+          }}
+        />
+      )}
 
       {/* Active Cooking Mode Modal */}
       {cookingSession && (

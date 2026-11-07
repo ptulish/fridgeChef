@@ -88,29 +88,39 @@ class TasteProfileUpdaterService:
 
     @staticmethod
     def generate_ai_summary(profile: Dict[str, Any]) -> str:
-        meats = profile.get("meat_preferences", {})
+        habits = profile.get("habits", {})
         salt_sens = profile.get("salt_sensitivity", "high")
-        salt_rule = profile.get("habits", {}).get(
+        salt_rule = habits.get(
             "salt_rule",
             "Высокая чувствительность к соли: не солить готовые блюда, разбавлять соевый соус водой."
         )
         sauce = profile.get("sauce_preference", {}).get("sauce_volume", "abundant")
-        disliked = ", ".join(profile.get("disliked_ingredients", ["грибы", "болгарский перец"]))
-        equipment = ", ".join(profile.get("equipment", ["сковорода", "мультиварка", "духовка"]))
+        disliked_items = profile.get("disliked_ingredients", [])
+        disliked = ", ".join(disliked_items) if disliked_items else "нет"
+        eq_items = profile.get("equipment", ["плита", "сковорода", "кастрюля"])
+        equipment = ", ".join(eq_items) if eq_items else "плита, сковорода"
         skill = profile.get("skill_level", "home_cook")
         allergies = profile.get("allergies", [])
         allergies_str = f"- СТРОГИЕ АЛЛЕРГИИ (ЗАПРЕЩЕНО ИСПОЛЬЗОВАТЬ): {', '.join(allergies)}." if allergies else "- Аллергий нет."
+
+        diet_type = habits.get("diet_type") or (profile.get("diet_modes", ["omnivore"])[0] if profile.get("diet_modes") else "omnivore")
+        cooking_time = habits.get("cooking_time_pref", "30–45 минут")
+        spice = habits.get("spice_tolerance", "легкая пикантность")
+        goal = habits.get("nutritional_goal", "вкусно и сбалансированно")
+        cuisines = ", ".join(profile.get("favorite_cuisines", [])) or "домашняя классика, средиземноморская"
 
         lines = [
             "ПЕРСОНАЛЬНЫЙ КУЛИНАРНЫЙ ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ:",
             f"- Уровень кулинарного мастерства: {skill}.",
             allergies_str,
-            f"- Предпочтения по мясу: говядина, свинина (любит), курица (готовит, но требователен к соусу), рыба. Сосиски только немецкие.",
-            f"- Нелюбимые продукты (ЗАПРЕЩЕНО добавлять без спроса): {disliked}.",
-            f"- Соус: требуется {sauce} (обильный соус, покрывающий лапшу и мясо). Обязательно разделять маринад и основной соус.",
+            f"- Тип питания (диета): {diet_type}.",
+            f"- Доступное кухонное оборудование: {equipment}.",
+            f"- Время готовки в будни: {cooking_time}.",
+            f"- Отношение к остроте: {spice}.",
+            f"- Главная цель в питании: {goal}.",
+            f"- Любимые кухни: {cuisines}.",
+            f"- Стоп-лист продуктов (ЗАПРЕЩЕНО добавлять без спроса): {disliked}.",
+            f"- Соус: требуется {sauce} (соус покрывает гарнир и основу).",
             f"- Чувствительность к соли: {salt_sens}. Правило: {salt_rule}",
-            f"- Вкусовой баланс: любит баланс сладкого, кислого и чесночного вкуса. Острота регулируемая.",
-            f"- Доступное оборудование: {equipment}.",
-            "- Стандартная порция: мясо около 200г на порцию. Точные граммы и миллилитры."
         ]
         return "\n".join(lines)

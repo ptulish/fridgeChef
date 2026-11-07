@@ -112,3 +112,34 @@ def test_recipe_draft_pydantic_validation():
     assert draft.macros_per_serving.kcal == 490
     assert len(draft.ingredients) == 2
     assert draft.ingredients[0].inventory_ref == "i1"
+
+
+def test_build_context_diet_and_equipment_enforcement():
+    profile = {
+        "skill_level": "beginner",
+        "equipment": ["микроволновка", "сковорода"],
+        "allergies": ["лактоза"],
+        "disliked_ingredients": ["кинза", "печенка"],
+        "favorite_cuisines": ["итальянская", "азиатская"],
+        "habits": {
+            "diet_type": "vegetarian",
+            "cooking_time_pref": "до 15–20 минут",
+            "spice_tolerance": "никакой остроты",
+            "nutritional_goal": "сбросить вес",
+        },
+    }
+
+    sys_inst, _, _ = PromptContextBuilder.build_context(
+        pantry_items=[],
+        taste_profile=profile,
+        prompt="быстрый перекус",
+    )
+
+    assert "СТРОГОЕ ВЕГЕТАРИАНСТВО" in sys_inst
+    assert "микроволновка, сковорода" in sys_inst
+    assert "до 15–20 минут" in sys_inst
+    assert "никакой остроты" in sys_inst
+    assert "сбросить вес" in sys_inst
+    assert "лактоза" in sys_inst
+    assert "кинза, печенка" in sys_inst
+

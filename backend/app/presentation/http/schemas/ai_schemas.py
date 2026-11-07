@@ -59,6 +59,7 @@ class GenerateAIRecipeRequest(BaseModel):
     marinate_meat: Optional[bool] = False
     marinate_duration_minutes: Optional[int] = None
     must_use_ingredients: Optional[List[str]] = Field(default_factory=list)
+    equipment: Optional[List[str]] = None
 
 
 class RefineAIRecipeRequest(BaseModel):

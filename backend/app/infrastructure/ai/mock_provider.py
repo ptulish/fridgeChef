@@ -23,8 +23,23 @@ class MockRecipeAIProvider:
     ) -> Dict[str, Any]:
         prompt_lower = (prompt or "").lower().strip()
 
-        # 1. Meat Selection
-        if any(w in prompt_lower for w in ("говядин", "beef", "rind")):
+        # Check diet type from habits or profile
+        habits = taste_profile.get("habits", {})
+        diet_type = habits.get("diet_type") or (taste_profile.get("diet_modes", ["omnivore"])[0] if taste_profile.get("diet_modes") else "omnivore")
+
+        is_veg = diet_type in ("vegetarian", "vegan")
+        is_pesco = diet_type == "pescatarian"
+
+        # 1. Protein Selection based on Diet
+        if is_veg:
+            meat_name = "Тофу классический"
+            meat_prep = "нарезать кубиками и просушить салфеткой"
+            title_meat = "нежным тофу"
+        elif is_pesco:
+            meat_name = "Филе лосося (или креветки)"
+            meat_prep = "нарезать удобными порционными кусочками"
+            title_meat = "морепродуктами"
+        elif any(w in prompt_lower for w in ("говядин", "beef", "rind")):
             meat_name = "Говядина"
             meat_prep = "нарезать тонкими полосками поперек волокон"
             title_meat = "говядиной"
@@ -51,6 +66,10 @@ class MockRecipeAIProvider:
                 meat_name = "Свинина (гуляш)"
                 meat_prep = "нарезать тонкими брусочками"
                 title_meat = "свининой"
+            elif any("тофу" in n for n in pantry_names):
+                meat_name = "Тофу классический"
+                meat_prep = "нарезать кубиками"
+                title_meat = "тофу"
             else:
                 meat_name = "Куриное филе"
                 meat_prep = "нарезать удобными кусочками"

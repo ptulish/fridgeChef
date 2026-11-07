@@ -155,11 +155,24 @@ async def generate_recipe(
             "disliked_ingredients": taste_profile.disliked_ingredients,
             "equipment": taste_profile.equipment,
             "habits": taste_profile.habits,
+            "skill_level": taste_profile.skill_level,
+            "diet_modes": taste_profile.diet_modes,
+            "active_mode": taste_profile.active_mode,
+            "favorite_cuisines": taste_profile.favorite_cuisines,
+            "allergies": taste_profile.allergies,
+            "activity_level": taste_profile.activity_level,
+            "weight_kg": taste_profile.weight_kg,
+            "height_cm": taste_profile.height_cm,
+            "meals_per_day": taste_profile.meals_per_day,
+            "flavor_params": taste_profile.flavor_params,
             "ai_profile_summary": taste_profile.ai_profile_summary,
         }
         if taste_profile
         else {}
     )
+
+    if payload.equipment is not None:
+        profile_dict["equipment"] = payload.equipment
 
     recipe_data = await ai_provider.generate_recipe_suggestion(
         pantry_items=pantry_summary,
@@ -209,6 +222,16 @@ async def refine_recipe(
             "disliked_ingredients": taste_profile.disliked_ingredients,
             "equipment": taste_profile.equipment,
             "habits": taste_profile.habits,
+            "skill_level": taste_profile.skill_level,
+            "diet_modes": taste_profile.diet_modes,
+            "active_mode": taste_profile.active_mode,
+            "favorite_cuisines": taste_profile.favorite_cuisines,
+            "allergies": taste_profile.allergies,
+            "activity_level": taste_profile.activity_level,
+            "weight_kg": taste_profile.weight_kg,
+            "height_cm": taste_profile.height_cm,
+            "meals_per_day": taste_profile.meals_per_day,
+            "flavor_params": taste_profile.flavor_params,
             "ai_profile_summary": taste_profile.ai_profile_summary,
         }
         if taste_profile
